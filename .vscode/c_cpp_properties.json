@@ -5,7 +5,8 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/src",
-                "${workspaceFolder}/tests"
+                "${workspaceFolder}/tests",
+                "/home/nightingale"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang",

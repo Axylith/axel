@@ -122,6 +122,7 @@ namespace axel {
         
         return(0b10 << 14) | 16383;
     }
+    
 
     constexpr uint32_t decode_delta(uint16_t encoded){
         uint8_t tier = encoded >> 14;
