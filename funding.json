@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "Axylith",
+    "description": "Local-first computational research workbench",
+    "url": "https://gitlab.com/axylith-oss/axylith",
+    "license": "AGPL-3.0"
+  },
+  "funding": {
+    "channels": [
+      {
+        "type": "github_sponsors",
+        "url": "https://github.com/sponsors/axylith"
+      }
+    ]
+  }
+}

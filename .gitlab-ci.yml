@@ -1,0 +1,44 @@
+stages:
+  - build
+  - test
+
+# ─── GCC BUILD ───────────────────────────────────────────
+build-gcc:
+  stage: build
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq g++ libvulkan-dev libx11-dev > /dev/null 2>&1
+  script:
+    - g++ -std=c++20 -O2 -Wall -Wextra -Wpedantic
+        -o axylith window.cpp
+        -lvulkan -lX11
+    - ls -lh axylith
+  artifacts:
+    paths:
+      - axylith
+    expire_in: 1 week
+
+# ─── CLANG BUILD ─────────────────────────────────────────
+build-clang:
+  stage: build
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq clang libvulkan-dev libx11-dev > /dev/null 2>&1
+  script:
+    - clang++ -std=c++20 -O2 -Wall -Wextra -Wpedantic
+        -o axylith-clang window.cpp
+        -lvulkan -lX11
+    - ls -lh axylith-clang
+
+# ─── TESTS ───────────────────────────────────────────────
+test-axl:
+  stage: test
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq g++ > /dev/null 2>&1
+  script:
+    - g++ -std=c++20 -O2 -o axl_test axl_test.cpp
+    - ./axl_test

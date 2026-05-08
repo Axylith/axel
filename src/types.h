@@ -1,8 +1,71 @@
 #pragma once
-
+#include <chrono>
+#include <cstdio>
 #include <cstdint>
-#include <cstddef>
-#include <ctime>
+#include <cstring>
+#include <cstdlib>
+#include <atomic>
+#include <vulkan/vulkan.h>
+#include "renderer.h"
+
+void print_resource_usage() {
+    // RAM from /proc/self/status
+    FILE* f = fopen("/proc/self/status", "r");
+    if (f) {
+        char line[256];
+        while (fgets(line, sizeof(line), f)) {
+            if (strncmp(line, "VmRSS:", 6) == 0) {
+                printf("[resources] %s", line);  // resident memory
+                break;
+            }
+        }
+        fclose(f);
+    }
+    
+    // CPU from /proc/self/stat
+    f = fopen("/proc/self/stat", "r");
+    if (f) {
+        long utime, stime;
+        // skip first 13 fields, read utime and stime
+        fscanf(f, "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %ld %ld", &utime, &stime);
+        printf("[resources] CPU ticks: user=%ld kernel=%ld\n", utime, stime);
+        fclose(f);
+    }
+}
+
+struct Timer {
+    std::chrono::high_resolution_clock::time_point start;
+    
+    Timer() : start(std::chrono::high_resolution_clock::now()) {}
+    
+    double elapsed_ms() {
+        auto now = std::chrono::high_resolution_clock::now();
+        return std::chrono::duration<double, std::milli>(now - start).count();
+    }
+    
+    void log(const char* label) {
+        printf("[timer] %-40s %.3f ms\n", label, elapsed_ms());
+        start = std::chrono::high_resolution_clock::now(); // reset for next measurement
+    }
+};
+
+// Include these AFTER Timer, BEFORE VulkanState
+#include "vulkan_init.h"
+#include "swapchain.h"
+
+
+
+struct VulkanState {
+    VkInstance instance = VK_NULL_HANDLE;
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
+    GPU gpu{};
+    VulkanDevice vkdev{};
+    Swapchain swapchain{};
+    Renderer renderer{};
+    std::atomic<bool> ready{false};
+    std::atomic<bool> failed{false};
+};
+
 
 namespace axel {
 

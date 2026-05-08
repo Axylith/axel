@@ -1,61 +1,54 @@
-version: 2.1
+stages:
+  - build
+  - test
+  - analyze
 
-jobs:
-  build-gcc:
-    docker:
-      - image: debian:bookworm-slim
-    steps:
-      - checkout
-      - run:
-          name: Install dependencies
-          command: |
-            apt-get update -qq
-            apt-get install -y -qq g++ libvulkan-dev libx11-dev > /dev/null 2>&1
-      - run:
-          name: Build (GCC)
-          command: |
-            g++ -std=c++20 -O2 -Wall -Wextra -Wpedantic \
-              -o axylith window.cpp \
-              -lvulkan -lX11
-            ls -lh axylith
+build-release:
+  stage: build
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq g++ cmake make libvulkan-dev libx11-dev > /dev/null 2>&1
+  script:
+    - mkdir build && cd build
+    - cmake .. -DCMAKE_BUILD_TYPE=Release
+    - make -j$(nproc)
+    - ls -lh axylith
+  artifacts:
+    paths:
+      - build/axylith
+    expire_in: 1 week
 
-  build-clang:
-    docker:
-      - image: debian:bookworm-slim
-    steps:
-      - checkout
-      - run:
-          name: Install dependencies
-          command: |
-            apt-get update -qq
-            apt-get install -y -qq clang libvulkan-dev libx11-dev > /dev/null 2>&1
-      - run:
-          name: Build (Clang)
-          command: |
-            clang++ -std=c++20 -O2 -Wall -Wextra -Wpedantic \
-              -o axylith-clang window.cpp \
-              -lvulkan -lX11
-            ls -lh axylith-clang
+build-strict:
+  stage: build
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq g++ cmake make libvulkan-dev libx11-dev > /dev/null 2>&1
+  script:
+    - mkdir build && cd build
+    - cmake .. -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Werror"
+    - make -j$(nproc)
 
-  test-axl:
-    docker:
-      - image: debian:bookworm-slim
-    steps:
-      - checkout
-      - run:
-          name: Install dependencies
-          command: |
-            apt-get update -qq
-            apt-get install -y -qq g++ > /dev/null 2>&1
-      - run:
-          name: Run tests
-          command: |
-            g++ -std=c++20 -O2 -o axl_test axl_test.cpp
-            ./axl_test
+build-clang:
+  stage: build
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq clang cmake make libvulkan-dev libx11-dev > /dev/null 2>&1
+  script:
+    - mkdir build && cd build
+    - cmake .. -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+    - make -j$(nproc)
 
-workflows:
-  build-and-test:
-    jobs:
-      - build-gcc
-      - build-clang
-      - test-axl
+test-axl:
+  stage: test
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq g++ cmake make > /dev/null 2>&1
+  script:
+    - mkdir build && cd build
+    - cmake ..
+    - make -j$(nproc)
+    - ctest --output-on-failure
