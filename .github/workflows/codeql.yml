@@ -1,0 +1,26 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: cpp
+      - name: Install deps
+        run: sudo apt-get install -y -qq libvulkan-dev libx11-dev
+      - name: Build
+        run: |
+          mkdir build && cd build
+          cmake ..
+          make -j$(nproc)
+      - uses: github/codeql-action/analyze@v3
