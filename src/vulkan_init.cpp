@@ -129,7 +129,8 @@ VulkanDevice create_device(GPU& gpu){
 }
 
 VkInstance create_vulkan_instance(){
-    //App info -tells drivers who we are
+    printf("[vk-init] step 1: appInfo\n"); fflush(stdout);
+    
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "axylith";
@@ -138,20 +139,19 @@ VkInstance create_vulkan_instance(){
     appInfo.engineVersion = VK_MAKE_VERSION(0,1,0);
     appInfo.apiVersion = VK_API_VERSION_1_3;
 
-    const char* extension[] = {
+    printf("[vk-init] step 2: createInfo\n"); fflush(stdout);
+    
+    const char* extensions[] = {
         VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
         VK_KHR_SURFACE_EXTENSION_NAME
     };
-
-    
 
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
     createInfo.enabledExtensionCount = 2;
-    createInfo.ppEnabledExtensionNames = extension;
+    createInfo.ppEnabledExtensionNames = extensions;
 
-    // In create_vulkan_instance, make layers conditional:
     #ifdef NDEBUG
         createInfo.enabledLayerCount = 0;
         createInfo.ppEnabledLayerNames = nullptr;
@@ -161,18 +161,21 @@ VkInstance create_vulkan_instance(){
         createInfo.ppEnabledLayerNames = layers;
     #endif
 
+    printf("[vk-init] step 3: calling vkCreateInstance\n"); fflush(stdout);
+    
     VkInstance instance = VK_NULL_HANDLE;
     VkResult result = vkCreateInstance(&createInfo, nullptr, &instance);
 
+    printf("[vk-init] step 4: returned %d\n", result); fflush(stdout);
+    
     if(result != VK_SUCCESS){
-        fprintf(stderr, "[vulkan] failed to create instance: %d\n", result);
+        fprintf(stderr, "[vulkan] failed: %d\n", result);
+        fflush(stderr);
         return VK_NULL_HANDLE;
     }
 
-    printf("[vulkan] Instance created (Vulkan 1.3)\n");
+    printf("[vulkan] Instance created\n"); fflush(stdout);
     return instance;
-
-
 }
 
 VkSurfaceKHR create_surface(VkInstance instance, AppWindow& app){
@@ -185,6 +188,7 @@ VkSurfaceKHR create_surface(VkInstance instance, AppWindow& app){
     VkResult result = vkCreateXlibSurfaceKHR(instance, &create_info, nullptr, &surface);
     if (result != VK_SUCCESS) {
         fprintf(stderr, "[vulkan] Failed to create surface: %d\n", result);
+
         return VK_NULL_HANDLE;
     }
 

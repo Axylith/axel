@@ -68,6 +68,9 @@ struct VulkanState {
     std::atomic<bool> ready{false};
     std::atomic<bool> failed{false};
     bool swapchain_dirty = false;
+    VkSwapchainKHR pending_destroy_swapchain = VK_NULL_HANDLE;
+    VkImageView pending_destroy_views[8] = {};
+    uint32_t pending_destroy_count = 0;
 };
 
 
@@ -128,6 +131,7 @@ namespace axel {
         uint8_t color;          // 1 byte
     };
     // Total 10 bytes
+    #pragma pack(pop);
     static_assert(sizeof(Project) == 10, "Project is 10 bytes");
 
     constexpr uint32_t PROJECT_COLORS[] = {

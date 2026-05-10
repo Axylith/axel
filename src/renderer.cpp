@@ -120,11 +120,7 @@ void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc, Pipeline& pip
         fprintf(stderr, "[vulkan] vkAcquireNextImageKHR failed: %d\n", acq);
         return;
     }
-
-    if(acq == VK_SUBOPTIMAL_KHR){
-        r.swapchain_dirty_local = true;
-    }
-
+    
     vkResetFences(vkdev.device, 1, &r.in_flight);
 
 
@@ -246,9 +242,9 @@ void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc, Pipeline& pip
     present_info.pImageIndices = &image_index;
 
     VkResult pres = vkQueuePresentKHR(vkdev.present_queue, &present_info);
-    if(pres == VK_ERROR_OUT_OF_DATE_KHR || pres == VK_SUBOPTIMAL_KHR){
+    if(pres == VK_ERROR_OUT_OF_DATE_KHR){
         r.swapchain_dirty_local = true;
-    } else if (pres != VK_SUCCESS){
+    } else if (pres != VK_SUCCESS && pres != VK_SUBOPTIMAL_KHR){
         fprintf(stderr, "[vulkan] vkQueuePresentKHR failed: %d\n", pres);
     }
 }

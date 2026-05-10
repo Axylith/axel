@@ -24,7 +24,29 @@ Swapchain create_swapchain(VkDevice device, VkPhysicalDevice physical, VkSurface
         }
     }
 
+
     VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+
+    uint32_t mode_count = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physical, surface, &mode_count, nullptr);
+    VkPresentModeKHR modes[16];
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physical, surface, &mode_count, modes);
+
+    for(uint32_t i = 0; i < mode_count; i++){
+        if(modes[i] == VK_PRESENT_MODE_MAILBOX_KHR){
+            present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+            break;
+        }
+    }
+
+    if(present_mode == VK_PRESENT_MODE_FIFO_KHR){
+        for(uint32_t i = 0; i < mode_count; i++){
+            if(modes[i] == VK_PRESENT_MODE_FIFO_RELAXED_KHR){
+                present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+                break;
+            }
+        }
+    }
 
     //Pick extent (size)
     VkExtent2D extent;
@@ -105,39 +127,40 @@ Swapchain create_swapchain(VkDevice device, VkPhysicalDevice physical, VkSurface
 }
 
 void recreate_swapchain(VulkanState& vk, AppWindow& app){
-    if (app.width == 0 || app.height == 0){
-        return;
-    }
+    if (app.width == 0 || app.height == 0) return;
 
     vkDeviceWaitIdle(vk.vkdev.device);
 
+    // Defer destruction of any pending old swapchain from a previous recreate
+    if (vk.pending_destroy_swapchain != VK_NULL_HANDLE) {
+        for (uint32_t i = 0; i < vk.pending_destroy_count; i++) {
+            vkDestroyImageView(vk.vkdev.device, vk.pending_destroy_views[i], nullptr);
+        }
+        vkDestroySwapchainKHR(vk.vkdev.device, vk.pending_destroy_swapchain, nullptr);
+        vk.pending_destroy_swapchain = VK_NULL_HANDLE;
+        vk.pending_destroy_count = 0;
+    }
+
+    // Save current as pending — DO NOT destroy
+    VkSwapchainKHR old_handle = vk.swapchain.handle;
+    vk.pending_destroy_swapchain = old_handle;
+    vk.pending_destroy_count = vk.swapchain.image_count;
+    for (uint32_t i = 0; i < vk.swapchain.image_count; i++) {
+        vk.pending_destroy_views[i] = vk.swapchain.views[i];
+    }
+
+    Swapchain new_sc = create_swapchain(vk.vkdev.device, vk.gpu.device,
+                                        vk.surface, app, vk.gpu, old_handle);
+    if (new_sc.handle == VK_NULL_HANDLE) {
+        fprintf(stderr, "[vulkan] Swapchain recreation failed\n");
+        return;
+    }
+    vk.swapchain = new_sc;
 
     vkDestroySemaphore(vk.vkdev.device, vk.renderer.image_available, nullptr);
     vkDestroySemaphore(vk.vkdev.device, vk.renderer.render_finished, nullptr);
-
     VkSemaphoreCreateInfo sem_info{};
     sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     vkCreateSemaphore(vk.vkdev.device, &sem_info, nullptr, &vk.renderer.image_available);
     vkCreateSemaphore(vk.vkdev.device, &sem_info, nullptr, &vk.renderer.render_finished);
-
-    for (uint32_t i = 0; i < vk.swapchain.image_count; i++){
-        vkDestroyImageView(vk.vkdev.device, vk.swapchain.views[i], nullptr);
-    }
-
-    VkSwapchainKHR old_handle = vk.swapchain.handle;
-    Swapchain new_sc = create_swapchain(vk.vkdev.device, vk.gpu.device,
-                                        vk.surface, app, vk.gpu, old_handle);
-
-    if (new_sc.handle == VK_NULL_HANDLE){
-        fprintf(stderr, "[vulkan] Swapchain recreation failed\n");
-        return;
-    }
-
-    vkDestroySwapchainKHR(vk.vkdev.device, old_handle, nullptr);
-    vk.swapchain = new_sc;
-
-    printf("[vulkan] Swapchain recreated (%ux%u, %u images)\n",
-        vk.swapchain.extent.width,
-        vk.swapchain.extent.height,
-        vk.swapchain.image_count);
 }

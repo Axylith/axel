@@ -18,6 +18,7 @@ add_executable(axylith
     src/monitor.h
     src/renderer.cpp
     src/pipeline.cpp
+    src/font.cpp
 
 )
 
@@ -50,6 +51,7 @@ target_include_directories(axylith PRIVATE src)
 target_link_libraries(axylith PRIVATE
     Vulkan::Vulkan
     X11::X11
+    ${X11_Xext_LIB}
 )
 
 # ─── Warnings (strict but not -Werror yet) ────────────
