@@ -2,11 +2,11 @@ name: CodeQL
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, development]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, development]
   schedule:
-    - cron: "0 6 * * 1"  # Mondays at 06:00 UTC
+    - cron: "0 6 * * 1"
 
 jobs:
   analyze:
@@ -36,7 +36,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential cmake ninja-build \
-            libvulkan-dev libx11-dev libxext-dev glslc
+            libvulkan-dev libx11-dev libxext-dev \
+            libwayland-dev wayland-protocols \
+            glslc
 
       - name: Build
         run: |

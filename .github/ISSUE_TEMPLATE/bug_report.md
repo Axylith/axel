@@ -26,6 +26,7 @@ What actually happens.
 ## Environment
 
 - OS: (e.g. Ubuntu 24.04)
+- Display server: (X11 or Wayland)
 - GPU: (e.g. NVIDIA RTX 5090)
 - Driver version: (e.g. 570.86.16)
 - Axylith version/commit: (e.g. abc1234)
@@ -33,10 +34,7 @@ What actually happens.
 
 ## Logs
 
-Paste any error output here:
-
-```
-```
+Paste any error output here.
 
 ## Screenshots
 

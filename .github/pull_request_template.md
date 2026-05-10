@@ -25,12 +25,11 @@ Fixes #
 
 ## Performance Impact
 
-If this change affects performance, include before/after measurements:
+If this change affects performance, include before/after measurements.
 
-```
-Before: 
-After:  
-```
+Before:
+
+After:
 
 ## Screenshots
 

@@ -11,17 +11,28 @@ jobs:
         build_type: [Debug, Release, RelWithDebInfo]
     steps:
       - uses: actions/checkout@v4
-      - run: |
+
+      - name: Install dependencies
+        run: |
           sudo apt-get update
-          sudo apt-get install -y ${{ matrix.compiler }} cmake ninja-build \
-            libvulkan-dev libx11-dev libxext-dev glslc
+          sudo apt-get install -y \
+            ${{ matrix.compiler }} cmake ninja-build \
+            libvulkan-dev vulkan-validationlayers \
+            libx11-dev libxext-dev \
+            libwayland-dev wayland-protocols \
+            glslc
+
+      - name: Resolve compiler names
+        run: |
+          CC_BIN="${{ matrix.compiler }}"
+          CXX_BIN=$(echo "${{ matrix.compiler }}" | sed 's/gcc/g++/;s/clang/clang++/')
+          echo "CC=$CC_BIN" >> $GITHUB_ENV
+          echo "CXX=$CXX_BIN" >> $GITHUB_ENV
+
       - name: Configure & build
         run: |
-          CC_NAME=$(echo ${{ matrix.compiler }} | cut -d- -f1)
-          CXX_NAME=${CC_NAME/gcc/g++}
-          CXX_NAME=${CXX_NAME/clang/clang++}
           cmake -B build -G Ninja \
-            -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
-            -DCMAKE_CXX_COMPILER=$(echo ${{ matrix.compiler }} | sed 's/gcc/g++/;s/clang/clang++/') \
+            -DCMAKE_C_COMPILER=$CC \
+            -DCMAKE_CXX_COMPILER=$CXX \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
           cmake --build build -j

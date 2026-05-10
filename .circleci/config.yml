@@ -1,19 +1,30 @@
 stages:
   - build
   - test
-  - analyze
+
+# Shared deps installed via YAML anchor — reused across jobs
+.deps: &install_deps
+  - apt-get update -qq
+  - apt-get install -y -qq
+      cmake ninja-build
+      libvulkan-dev vulkan-validationlayers
+      libx11-dev libxext-dev
+      libwayland-dev wayland-protocols
+      glslc
+      > /dev/null 2>&1
+
+default:
+  image: debian:bookworm-slim
 
 build-release:
   stage: build
-  image: debian:bookworm-slim
   before_script:
-    - apt-get update -qq
-    - apt-get install -y -qq g++ cmake make libvulkan-dev libx11-dev > /dev/null 2>&1
+    - apt-get install -y -qq g++
+    - *install_deps
   script:
-    - mkdir build && cd build
-    - cmake .. -DCMAKE_BUILD_TYPE=Release
-    - make -j$(nproc)
-    - ls -lh axylith
+    - cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+    - cmake --build build -j$(nproc)
+    - ls -lh build/axylith
   artifacts:
     paths:
       - build/axylith
@@ -21,34 +32,31 @@ build-release:
 
 build-strict:
   stage: build
-  image: debian:bookworm-slim
   before_script:
-    - apt-get update -qq
-    - apt-get install -y -qq g++ cmake make libvulkan-dev libx11-dev > /dev/null 2>&1
+    - apt-get install -y -qq g++
+    - *install_deps
   script:
-    - mkdir build && cd build
-    - cmake .. -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Werror"
-    - make -j$(nproc)
+    - cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Werror"
+    - cmake --build build -j$(nproc)
 
 build-clang:
   stage: build
-  image: debian:bookworm-slim
   before_script:
-    - apt-get update -qq
-    - apt-get install -y -qq clang cmake make libvulkan-dev libx11-dev > /dev/null 2>&1
+    - apt-get install -y -qq clang
+    - *install_deps
   script:
-    - mkdir build && cd build
-    - cmake .. -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-    - make -j$(nproc)
+    - cmake -B build -G Ninja
+        -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_C_COMPILER=clang
+        -DCMAKE_CXX_COMPILER=clang++
+    - cmake --build build -j$(nproc)
 
 test-axl:
   stage: test
-  image: debian:bookworm-slim
   before_script:
-    - apt-get update -qq
-    - apt-get install -y -qq g++ cmake make > /dev/null 2>&1
+    - apt-get install -y -qq g++
+    - *install_deps
   script:
-    - mkdir build && cd build
-    - cmake ..
-    - make -j$(nproc)
-    - ctest --output-on-failure
+    - cmake -B build -G Ninja
+    - cmake --build build -j$(nproc)
+    - cd build && ctest --output-on-failure

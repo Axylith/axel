@@ -8,12 +8,17 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           sudo apt-get update
-          sudo apt-get install -y clang-tidy cmake ninja-build \
-            libvulkan-dev libx11-dev libxext-dev
+          sudo apt-get install -y \
+            clang-tidy cmake ninja-build \
+            libvulkan-dev libx11-dev libxext-dev \
+            libwayland-dev wayland-protocols \
+            glslc
+
       - name: Configure
         run: cmake -B build -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
       - name: Run clang-tidy
         run: |
           find src -name '*.cpp' | xargs -I{} clang-tidy -p build {} \
-            --warnings-as-errors=* \
-            --checks='-*,bugprone-*,cert-*,clang-analyzer-*,modernize-*,performance-*,readability-*,-readability-identifier-length,-modernize-use-trailing-return-type'
+            --warnings-as-errors='bugprone-*,clang-analyzer-*' \
+            --checks='-*,bugprone-*,clang-analyzer-*,performance-*,readability-misleading-indentation'

@@ -33,6 +33,7 @@ jobs:
             build-essential cmake ninja-build \
             libvulkan-dev vulkan-validationlayers \
             libx11-dev libxext-dev \
+            libwayland-dev wayland-protocols \
             glslc
 
       - name: Set compiler
@@ -56,6 +57,4 @@ jobs:
 
       - name: Test
         working-directory: build
-        run: |
-          if [ -x ./axl_test ]; then ./axl_test; fi
-          if [ -x ./font_test ]; then ./font_test; fi
+        run: ctest --output-on-failure
