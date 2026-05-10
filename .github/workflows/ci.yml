@@ -1,77 +1,11 @@
 name: CI
-
-on:
-  push:
-    branches: [main, master, develop]
-  pull_request:
-    branches: [main, master, develop]
-
+on: [push, pull_request]
 jobs:
-  build:
-    name: Build (${{ matrix.compiler }} on ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04]
-        compiler: [gcc, clang]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            libvulkan-dev \
-            vulkan-validationlayers \
-            libx11-dev \
-            libxext-dev \
-            glslc \
-            ninja-build
-
-      - name: Set compiler (gcc)
-        if: matrix.compiler == 'gcc'
-        run: |
-          echo "CC=gcc" >> $GITHUB_ENV
-          echo "CXX=g++" >> $GITHUB_ENV
-
-      - name: Set compiler (clang)
-        if: matrix.compiler == 'clang'
-        run: |
-          echo "CC=clang" >> $GITHUB_ENV
-          echo "CXX=clang++" >> $GITHUB_ENV
-
-      - name: Configure
-        run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_C_COMPILER=$CC \
-            -DCMAKE_CXX_COMPILER=$CXX
-
-      - name: Build
-        run: cmake --build build -j
-
-      - name: Run tests
-        working-directory: build
-        run: |
-          if [ -f axl_test ]; then
-            ./axl_test
-          else
-            echo "No tests to run yet"
-          fi
-
-  format:
-    name: Code formatting
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install clang-format
-        run: sudo apt-get install -y clang-format
-      - name: Check formatting
-        run: |
-          # Soft check for now — only warns, doesn't fail
-          # When you have a .clang-format file, change this to fail on diff
-          find src -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run 2>&1 | head -50 || true
+  build-gcc:
+    uses: ./.github/workflows/_setup.yml
+    with:
+      compiler: gcc
+  build-clang:
+    uses: ./.github/workflows/_setup.yml
+    with:
+      compiler: clang

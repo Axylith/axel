@@ -7,6 +7,7 @@ struct AppWindow
     Display* display;
     Window window;
     Atom wm_delete;
+    Atom wm_protocols;
     int width;
     int height;
     bool running;

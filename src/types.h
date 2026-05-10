@@ -7,8 +7,10 @@
 #include <atomic>
 #include <vulkan/vulkan.h>
 #include "renderer.h"
+#include "pipeline.h"
 
-void print_resource_usage() {
+
+inline void print_resource_usage() {
     // RAM from /proc/self/status
     FILE* f = fopen("/proc/self/status", "r");
     if (f) {
@@ -62,8 +64,10 @@ struct VulkanState {
     VulkanDevice vkdev{};
     Swapchain swapchain{};
     Renderer renderer{};
+    Pipeline pipeline{};
     std::atomic<bool> ready{false};
     std::atomic<bool> failed{false};
+    bool swapchain_dirty = false;
 };
 
 
