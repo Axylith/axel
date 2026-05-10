@@ -7,7 +7,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [gcc-12, gcc-13, clang-15, clang-17]
+        compiler: [gcc-12, gcc-13, clang-17]
         build_type: [Debug, Release, RelWithDebInfo]
     steps:
       - uses: actions/checkout@v4

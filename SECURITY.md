@@ -7,7 +7,7 @@
 If you discover a security vulnerability in Axylith, report it
 privately via email:
 
-**security@axylith.com**
+**dev@axylith.com**
 
 Include:
 

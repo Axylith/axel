@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability
+    url: mailto:dev@axylith.com
+    about: Do NOT open a public issue. Email us privately.
+  - name: Licensing & Commercial
+    url: mailto:founders@axylith.com
+    about: Commercial licenses, partnerships, and private contributions.
