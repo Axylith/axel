@@ -1,0 +1,27 @@
+# Show these even though they're a small percentage of the codebase
+*.s        linguist-detectable=true
+*.S        linguist-detectable=true
+*.asm      linguist-detectable=true
+*.glsl     linguist-detectable=true
+*.vert     linguist-detectable=true linguist-language=GLSL
+*.frag     linguist-detectable=true linguist-language=GLSL
+*.comp     linguist-detectable=true linguist-language=GLSL
+
+# Mark the SPIR-V binaries as generated so they don't pollute stats
+*.spv      linguist-generated=true
+
+# Hide CMake-heavy noise from the language bar
+*.cmake    linguist-detectable=false
+CMakeLists.txt linguist-detectable=false
+
+# Hide markdown so docs don't dominate the bar
+*.md       linguist-documentation=true
+
+# Vendored stuff (your tools/ and third_party/)
+tools/*           linguist-vendored=true
+third_party/*     linguist-vendored=true
+fonts/*           linguist-vendored=true
+
+# Generated artifacts
+assets/jetbrains_mono.png  linguist-generated=true
+assets/jetbrains_mono.json linguist-generated=true

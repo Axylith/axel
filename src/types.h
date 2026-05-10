@@ -7,8 +7,10 @@
 #include <atomic>
 #include <vulkan/vulkan.h>
 #include "renderer.h"
+#include "pipeline.h"
 
-void print_resource_usage() {
+
+inline void print_resource_usage() {
     // RAM from /proc/self/status
     FILE* f = fopen("/proc/self/status", "r");
     if (f) {
@@ -62,8 +64,13 @@ struct VulkanState {
     VulkanDevice vkdev{};
     Swapchain swapchain{};
     Renderer renderer{};
+    Pipeline pipeline{};
     std::atomic<bool> ready{false};
     std::atomic<bool> failed{false};
+    bool swapchain_dirty = false;
+    VkSwapchainKHR pending_destroy_swapchain = VK_NULL_HANDLE;
+    VkImageView pending_destroy_views[8] = {};
+    uint32_t pending_destroy_count = 0;
 };
 
 
@@ -124,6 +131,7 @@ namespace axel {
         uint8_t color;          // 1 byte
     };
     // Total 10 bytes
+    #pragma pack(pop);
     static_assert(sizeof(Project) == 10, "Project is 10 bytes");
 
     constexpr uint32_t PROJECT_COLORS[] = {

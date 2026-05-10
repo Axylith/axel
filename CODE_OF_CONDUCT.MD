@@ -27,7 +27,7 @@ why with technical reasoning.
 - Technical questions about the codebase → open an issue.
 - Bug reports → open an issue with reproduction steps.
 - Feature requests → open an issue describing the problem it solves.
-- Licensing, partnerships, private matters → email [contact email].
+- Licensing, partnerships, private matters → email founders@axylith.com.
 - Complaints about a rejected PR → email, not a public issue.
 
 **Do not** call out maintainers or contributors publicly for not

@@ -2,25 +2,50 @@ name: CodeQL
 
 on:
   push:
-    branches: [main]
+    branches: [main, master, development]
   pull_request:
-    branches: [main]
+    branches: [main, master, development]
+  schedule:
+    - cron: "0 6 * * 1"
 
 jobs:
   analyze:
+    name: Analyze
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
+      contents: read
       security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["c-cpp"]
+
     steps:
       - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
         with:
-          languages: cpp
-      - name: Install deps
-        run: sudo apt-get install -y -qq libvulkan-dev libx11-dev
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libvulkan-dev libx11-dev libxext-dev \
+            libwayland-dev wayland-protocols \
+            glslc
+
       - name: Build
         run: |
-          mkdir build && cd build
-          cmake ..
-          make -j$(nproc)
-      - uses: github/codeql-action/analyze@v3
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build -j
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

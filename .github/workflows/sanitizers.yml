@@ -1,0 +1,21 @@
+name: Sanitizers
+on: [push, pull_request]
+jobs:
+  asan:
+    uses: ./.github/workflows/_setup.yml
+    with:
+      build_type: Debug
+      extra_cxx_flags: "-fsanitize=address -fno-omit-frame-pointer -g"
+      extra_linker_flags: "-fsanitize=address"
+  ubsan:
+    uses: ./.github/workflows/_setup.yml
+    with:
+      build_type: Debug
+      extra_cxx_flags: "-fsanitize=undefined -fno-omit-frame-pointer -g"
+      extra_linker_flags: "-fsanitize=undefined"
+  tsan:
+    uses: ./.github/workflows/_setup.yml
+    with:
+      build_type: Debug
+      extra_cxx_flags: "-fsanitize=thread -fno-omit-frame-pointer -g"
+      extra_linker_flags: "-fsanitize=thread"

@@ -1,15 +1,20 @@
+// renderer.h
 #pragma once
 #include <vulkan/vulkan.h>
 #include "swapchain.h"
 #include "vulkan_init.h"
+#include "pipeline.h"
 
-struct Renderer{
+struct Renderer {
     VkCommandPool command_pool;
     VkCommandBuffer command_buffer;
     VkSemaphore image_available;
-    VkSemaphore render_complete;
+    VkSemaphore render_finished;
     VkFence in_flight;
+    VkBuffer vertex_buffer;
+    VkDeviceMemory vertex_memory;
+    bool swapchain_dirty_local = false;
 };
 
-Renderer create_renderer(VulkanDevice& vkdev, GPU& gpu);
-void render_frame(Renderer& Renderer, VulkanDevice& vkdev, Swapchain& swapchain);
+Renderer create_renderer(VulkanDevice& vkdev, GPU& gpu, Pipeline& pipeline);
+void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc, Pipeline& pipeline);

@@ -2,6 +2,8 @@
 #include "window.h"
 #include "monitor.h"
 #include "vulkan_init.h"
+#include "swapchain.h"
+#include "font.h"
 #include <cstdio>
 #include <X11/keysym.h>
 #include <X11/Xlib.h>
@@ -13,10 +15,21 @@
 static jmp_buf x_error_jmp;
 static bool x_connection_lost = false;
 
+
 static int x_io_error_handler(Display*) {
     x_connection_lost = true;
     longjmp(x_error_jmp, 1);
     return 0;  // never reached
+}
+
+static void render_and_sync(VulkanState& vk, AppWindow& app) {
+    render_frame(vk.renderer, vk.vkdev, vk.swapchain, vk.pipeline);
+    if (app.sync_pending) {
+        vkDeviceWaitIdle(vk.vkdev.device);
+        XSyncSetCounter(app.display, app.sync_counter, app.sync_value);
+        app.sync_pending = false;
+        XFlush(app.display);
+    }
 }
 
 int main(int, char**){
@@ -25,23 +38,28 @@ int main(int, char**){
     Timer t;
     Timer total;
 
+    double last_sample_ms = 0.0;
+    constexpr double MONITOR_INTERVAL_MS = 1000.0;
+    double last_resize_time_ms = 0.0;
+    bool resize_pending = false;
+    constexpr double RESIZE_QUIET_MS = 16.0;
+
     AppWindow app = create_window(1280, 720);
     t.log("X11 window"); fflush(stdout);
+    printf("[main] app.running=%d, app.width=%d, app.height=%d\n",
+           (int)app.running, app.width, app.height);
+    fflush(stdout);
     if(!app.running) return 1;
 
     // Create surface on main thread (touches X11)
     VkInstance instance = create_vulkan_instance();
     t.log("Vulkan instance"); fflush(stdout);
     if(instance == VK_NULL_HANDLE) return 1;
+    
 
     VkSurfaceKHR surface = create_surface(instance, app);
     t.log("Vulkan surface"); fflush(stdout);
-    if(instance == VK_NULL_HANDLE) return 1;
-
-    
-
-    app.wm_delete = XInternAtom(app.display, "WM_DELETE_WINDOW", False);
-    printf("[debug] wm_delete atom: %lu\n", (unsigned long)app.wm_delete);
+    if(surface == VK_NULL_HANDLE) return 1;
                 
 
     ResourceMonitor monitor;
@@ -50,25 +68,43 @@ int main(int, char**){
     VulkanState vk;
     vk.instance = instance;
     vk.surface = surface;
+    
 
     std::thread init_thread([&vk, &app, &total]() {
         vk.gpu = pick_gpu(vk.instance, vk.surface);
-        if (vk.gpu.device == VK_NULL_HANDLE) { vk.failed = true; return; }
+        if (vk.gpu.device == VK_NULL_HANDLE) { vk.failed.store(true); return; }
 
         vk.vkdev = create_device(vk.gpu);
         if (vk.vkdev.device == VK_NULL_HANDLE) { vk.failed = true; return; }
 
         vk.swapchain = create_swapchain(vk.vkdev.device, vk.gpu.device, vk.surface, app, vk.gpu);
-        if (vk.swapchain.handle == VK_NULL_HANDLE) { vk.failed = true; return; };
-        
-        vk.renderer = create_renderer(vk.vkdev, vk.gpu);
+        if (vk.swapchain.handle == VK_NULL_HANDLE) { vk.failed = true; return; }
+
+        vk.pipeline = create_pipeline(vk.vkdev.device, vk.swapchain.format);
+        if (vk.pipeline.handle == VK_NULL_HANDLE) { vk.failed = true; return; }
+
+        vk.renderer = create_renderer(vk.vkdev, vk.gpu, vk.pipeline);
 
         printf("[timer] %-40s %.3f ms\n", "TOTAL INIT", total.elapsed_ms());
         vk.ready = true;
     });
 
     Timer monitor_timer;
-    int sample_counter = 0;
+
+    AxylFont font;
+    if (font_load_metadata(font, "../assets/jetbrains_mono.json")) {
+        // Sample a few glyphs
+        const Glyph* a = font_get_glyph(font, 'A');
+        const Glyph* hash = font_get_glyph(font, '#');
+        const Glyph* space = font_get_glyph(font, ' ');
+        if (a) {
+            printf("[test] 'A': advance=%.3f plane=(%.3f,%.3f,%.3f,%.3f) atlas=(%.0f,%.0f,%.0f,%.0f)\n",
+                   a->advance, a->plane_left, a->plane_bottom, a->plane_right, a->plane_top,
+                   a->atlas_left, a->atlas_bottom, a->atlas_right, a->atlas_top);
+        }
+        if (hash) printf("[test] '#': advance=%.3f\n", hash->advance);
+        if (space) printf("[test] ' ': advance=%.3f (whitespace, no quad)\n", space->advance);
+    }
 
    XSetIOErrorHandler(x_io_error_handler);
 
@@ -94,15 +130,40 @@ int main(int, char**){
                     break;
                 }
 
+                
                 case ClientMessage: {
-                    // Treat any ClientMessage as close request
-                    app.running = false;
+                    printf("[x11] ClientMessage msg_type=%lu data[0]=%ld\n",
+                           (unsigned long)ev.xclient.message_type,
+                           (long)ev.xclient.data.l[0]);
+                    fflush(stdout);
+                    
+                    if (ev.xclient.message_type == app.wm_protocols) {
+                        printf("[x11]   matched WM_PROTOCOLS, data[0]=%ld vs wm_delete=%lu\n",
+                               (long)ev.xclient.data.l[0],
+                               (unsigned long)app.wm_delete);
+                        fflush(stdout);
+                        if ((Atom)ev.xclient.data.l[0] == app.wm_delete) {
+                            printf("[x11]   closing window\n");
+                            fflush(stdout);
+                            app.running = false;
+                        } else if ((Atom)ev.xclient.data.l[0] == app.net_wm_sync_request){
+                            XSyncValue v;
+                            XSyncIntsToValue(&v, (unsigned int)ev.xclient.data.l[2], (int)ev.xclient.data.l[3]);
+                            app.sync_value = v;
+                            app.sync_pending = true;
+                        }
+                    }
                     break;
                 }
 
+                
+
                 case ConfigureNotify: {
-                    app.width = ev.xconfigure.width;
-                    app.height = ev.xconfigure.height;
+                    if (ev.xconfigure.width != app.width || ev.xconfigure.height != app.height) {
+                        app.width = ev.xconfigure.width;
+                        app.height = ev.xconfigure.height;
+                        vk.swapchain_dirty = true;
+                    }
                     break;
                 }
             }
@@ -113,16 +174,24 @@ int main(int, char**){
             app.running = false;
         }
 
-        sample_counter++;
-        if (sample_counter >= 10) {
-            monitor.sample(monitor_timer.elapsed_ms());
-            sample_counter = 0;
+        double now = monitor_timer.elapsed_ms();
+        if (now - last_sample_ms >= 1000.0) {
+            monitor.sample(now);
+            last_sample_ms = now;
         }
 
         if (!vk.ready) {
-            usleep(160000);
+            usleep(16000);
         } else {
-            render_frame(vk.renderer, vk.vkdev, vk.swapchain);
+            if (vk.swapchain_dirty) {
+                recreate_swapchain(vk, app);
+                vk.swapchain_dirty = false;
+            }
+            render_and_sync(vk, app);
+            if (vk.renderer.swapchain_dirty_local) {
+                vk.swapchain_dirty = true;
+                vk.renderer.swapchain_dirty_local = false;
+            }
         }
     }
 
@@ -133,15 +202,22 @@ cleanup:
 
     if (vk.ready) {
         vkDeviceWaitIdle(vk.vkdev.device);
-        vkDestroySemaphore(vk.vkdev.device, vk.renderer.render_complete, nullptr);
+        vkDestroyPipeline(vk.vkdev.device, vk.pipeline.handle, nullptr);
+        vkDestroyPipelineLayout(vk.vkdev.device, vk.pipeline.layout, nullptr);
+        vkDestroyBuffer(vk.vkdev.device, vk.renderer.vertex_buffer, nullptr);
+        vkFreeMemory(vk.vkdev.device, vk.renderer.vertex_memory, nullptr);
+        vkDestroySemaphore(vk.vkdev.device, vk.renderer.render_finished, nullptr);
         vkDestroySemaphore(vk.vkdev.device, vk.renderer.image_available, nullptr);
         vkDestroyFence(vk.vkdev.device, vk.renderer.in_flight, nullptr);
         vkDestroyCommandPool(vk.vkdev.device, vk.renderer.command_pool, nullptr);
         vkDeviceWaitIdle(vk.vkdev.device);
-        for(uint32_t i = 0; i < vk.swapchain.image_count; i++){
-            vkDestroyImageView(vk.vkdev.device, vk.swapchain.views[i], nullptr);
+        if (vk.pending_destroy_swapchain != VK_NULL_HANDLE) {
+            for (uint32_t i = 0; i < vk.pending_destroy_count; i++) {
+                vkDestroyImageView(vk.vkdev.device, vk.pending_destroy_views[i], nullptr);
+            }
+            vkDestroySwapchainKHR(vk.vkdev.device, vk.pending_destroy_swapchain, nullptr);
         }
-        vkDestroySwapchainKHR(vk.vkdev.device, vk.swapchain.handle, nullptr);
+
         vkDestroyDevice(vk.vkdev.device, nullptr);
     }
     vkDestroySurfaceKHR(vk.instance, vk.surface, nullptr);
@@ -149,8 +225,12 @@ cleanup:
 
     // Only touch X11 if connection is still alive
     if (!x_connection_lost) {
+        XSyncDestroyCounter(app.display, app.sync_counter);
         XDestroyWindow(app.display, app.window);
-        XCloseDisplay(app.display);
+        XSync(app.display, False);
+        //Note: XCloseDisplay can race with NVIDIA driver shutdown
+        //The OS reclaims the connection on process exit anyway
+        //XCloseDisplay(app.display);
     }
 
     printf("[cleanup] Shutdown complete\n"); fflush(stdout);

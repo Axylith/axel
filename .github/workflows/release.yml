@@ -1,0 +1,31 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libvulkan-dev libx11-dev libxext-dev \
+            libwayland-dev wayland-protocols \
+            glslc
+
+      - name: Build release
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+
+      - name: Strip binary
+        run: strip build/axylith
+
+      - name: Upload release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/axylith
+          generate_release_notes: true
