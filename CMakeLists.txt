@@ -17,7 +17,33 @@ add_executable(axylith
     src/swapchain.cpp
     src/monitor.h
     src/renderer.cpp
+    src/pipeline.cpp
+
 )
+
+# After add_executable
+find_program(GLSLC glslc)
+if(GLSLC)
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/shaders/quad.vert.spv
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
+        COMMAND ${GLSLC} ${CMAKE_SOURCE_DIR}/shaders/quad.vert
+                -o ${CMAKE_BINARY_DIR}/shaders/quad.vert.spv
+        DEPENDS ${CMAKE_SOURCE_DIR}/shaders/quad.vert
+    )
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/shaders/quad.frag.spv
+        COMMAND ${GLSLC} ${CMAKE_SOURCE_DIR}/shaders/quad.frag
+                -o ${CMAKE_BINARY_DIR}/shaders/quad.frag.spv
+        DEPENDS ${CMAKE_SOURCE_DIR}/shaders/quad.frag
+    )
+    add_custom_target(shaders ALL DEPENDS
+        ${CMAKE_BINARY_DIR}/shaders/quad.vert.spv
+        ${CMAKE_BINARY_DIR}/shaders/quad.frag.spv
+    )
+    add_dependencies(axylith shaders)
+endif()
+
 
 target_include_directories(axylith PRIVATE src)
 

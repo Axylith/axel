@@ -1,0 +1,27 @@
+name: Build Matrix
+on: [push, pull_request]
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc-12, gcc-13, clang-15, clang-17]
+        build_type: [Debug, Release, RelWithDebInfo]
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.compiler }} cmake ninja-build \
+            libvulkan-dev libx11-dev libxext-dev glslc
+      - name: Configure & build
+        run: |
+          CC_NAME=$(echo ${{ matrix.compiler }} | cut -d- -f1)
+          CXX_NAME=${CC_NAME/gcc/g++}
+          CXX_NAME=${CXX_NAME/clang/clang++}
+          cmake -B build -G Ninja \
+            -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
+            -DCMAKE_CXX_COMPILER=$(echo ${{ matrix.compiler }} | sed 's/gcc/g++/;s/clang/clang++/') \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          cmake --build build -j
