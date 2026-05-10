@@ -43,6 +43,12 @@ AppWindow create_window(int width, int height){
         ExposureMask |
         StructureNotifyMask
     );
+        // Register WM_DELETE before mapping
+    app.wm_delete = XInternAtom(app.display, "WM_DELETE_WINDOW", False);
+    app.wm_protocols = XInternAtom(app.display, "WM_PROTOCOLS", False);
+    XSetWMProtocols(app.display, app.window, &app.wm_delete, 0);
+    XFlush(app.display);
+
 
     // ── 7. Show the window ──
     XMapWindow(app.display,app.window);
