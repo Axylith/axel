@@ -1,9 +1,12 @@
 #include "swapchain.h"
-#include "window.h"          // needed for AppWindow&
-#include "vulkan_init.h"     // needed for GPU&
+#include "window.h"
+#include "pipeline.h"
+#include "vulkan_init.h"
+#include "types.h"
 #include <cstdio>
 
-Swapchain create_swapchain(VkDevice device, VkPhysicalDevice physical, VkSurfaceKHR surface, AppWindow& app, GPU& gpu){
+
+Swapchain create_swapchain(VkDevice device, VkPhysicalDevice physical, VkSurfaceKHR surface, AppWindow& app, GPU& gpu, VkSwapchainKHR old_handle){
     //Query what the surface supports
     VkSurfaceCapabilitiesKHR caps;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical, surface, &caps);
@@ -51,7 +54,7 @@ Swapchain create_swapchain(VkDevice device, VkPhysicalDevice physical, VkSurface
     create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     create_info.presentMode = present_mode;
     create_info.clipped = VK_TRUE;
-    create_info.oldSwapchain = VK_NULL_HANDLE;
+    create_info.oldSwapchain = old_handle;
 
     uint32_t family_indices[] = { gpu.graphics_queue_family, gpu.present_queue_family};
 
@@ -99,4 +102,42 @@ Swapchain create_swapchain(VkDevice device, VkPhysicalDevice physical, VkSurface
 
     printf("[vulkan] Swapchain created (%ux%u %u images)\n", extent.width, extent.height, sc.image_count);
     return sc;
+}
+
+void recreate_swapchain(VulkanState& vk, AppWindow& app){
+    if (app.width == 0 || app.height == 0){
+        return;
+    }
+
+    vkDeviceWaitIdle(vk.vkdev.device);
+
+
+    vkDestroySemaphore(vk.vkdev.device, vk.renderer.image_available, nullptr);
+    vkDestroySemaphore(vk.vkdev.device, vk.renderer.render_finished, nullptr);
+
+    VkSemaphoreCreateInfo sem_info{};
+    sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    vkCreateSemaphore(vk.vkdev.device, &sem_info, nullptr, &vk.renderer.image_available);
+    vkCreateSemaphore(vk.vkdev.device, &sem_info, nullptr, &vk.renderer.render_finished);
+
+    for (uint32_t i = 0; i < vk.swapchain.image_count; i++){
+        vkDestroyImageView(vk.vkdev.device, vk.swapchain.views[i], nullptr);
+    }
+
+    VkSwapchainKHR old_handle = vk.swapchain.handle;
+    Swapchain new_sc = create_swapchain(vk.vkdev.device, vk.gpu.device,
+                                        vk.surface, app, vk.gpu, old_handle);
+
+    if (new_sc.handle == VK_NULL_HANDLE){
+        fprintf(stderr, "[vulkan] Swapchain recreation failed\n");
+        return;
+    }
+
+    vkDestroySwapchainKHR(vk.vkdev.device, old_handle, nullptr);
+    vk.swapchain = new_sc;
+
+    printf("[vulkan] Swapchain recreated (%ux%u, %u images)\n",
+        vk.swapchain.extent.width,
+        vk.swapchain.extent.height,
+        vk.swapchain.image_count);
 }

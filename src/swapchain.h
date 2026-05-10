@@ -3,6 +3,7 @@
 #include "vulkan_init.h"
 
 struct AppWindow;
+struct VulkanState;   // ← add this forward declaration
 
 struct Swapchain {
     VkSwapchainKHR handle;
@@ -13,6 +14,5 @@ struct Swapchain {
     VkExtent2D extent;
 };
 
-Swapchain create_swapchain(VkDevice device, VkPhysicalDevice physical, VkSurfaceKHR surface, AppWindow& app, GPU& gpu);
-
-
+Swapchain create_swapchain(VkDevice device, VkPhysicalDevice physical, VkSurfaceKHR surface, AppWindow& app, GPU& gpu, VkSwapchainKHR old_handle = VK_NULL_HANDLE);
+void recreate_swapchain(VulkanState& vk, AppWindow& app);
