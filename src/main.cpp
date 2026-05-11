@@ -4,6 +4,7 @@
 #include "vulkan_init.h"
 #include "swapchain.h"
 #include "font.h"
+#include "atlas.h"
 #include <cstdio>
 #include <X11/keysym.h>
 #include <X11/Xlib.h>
@@ -85,8 +86,18 @@ int main(int, char**){
 
         vk.renderer = create_renderer(vk.vkdev, vk.gpu, vk.pipeline);
 
+        vk.atlas = create_atlas(vk.vkdev, vk.gpu, "../assets/jetbrains_mono.bin");
+        if (vk.atlas.width == 0) {
+            fprintf(stderr, "[atlas] Failed to create atlas\n");
+            vk.failed = true;
+            return;
+        }
+
+
         printf("[timer] %-40s %.3f ms\n", "TOTAL INIT", total.elapsed_ms());
         vk.ready = true;
+
+
     });
 
     Timer monitor_timer;
@@ -105,6 +116,7 @@ int main(int, char**){
         if (hash) printf("[test] '#': advance=%.3f\n", hash->advance);
         if (space) printf("[test] ' ': advance=%.3f (whitespace, no quad)\n", space->advance);
     }
+
 
    XSetIOErrorHandler(x_io_error_handler);
 
@@ -162,11 +174,38 @@ int main(int, char**){
                     if (ev.xconfigure.width != app.width || ev.xconfigure.height != app.height) {
                         app.width = ev.xconfigure.width;
                         app.height = ev.xconfigure.height;
-                        vk.swapchain_dirty = true;
+                        last_resize_time_ms = monitor_timer.elapsed_ms();
+                        resize_pending = true;
+
+                        // Acknowledge sync_request immediately — don't make WM wait for a render
+                        if (app.sync_pending) {
+                            XSyncSetCounter(app.display, app.sync_counter, app.sync_value);
+                            app.sync_pending = false;
+                            XFlush(app.display);
+                        }
                     }
                     break;
                 }
             }
+        }
+
+        if (resize_pending) {
+            double now = monitor_timer.elapsed_ms();
+            if ((now - last_resize_time_ms) >= 50.0) {  // 50ms quiet period
+                if (vk.ready.load()) {
+                    recreate_swapchain(vk, app);
+                    render_and_sync(vk, app);
+                }
+                resize_pending = false;
+            }
+            // While resize is pending, skip normal render entirely
+        } else if (vk.ready.load()) {
+            // Normal render path
+            if (vk.swapchain_dirty) {
+                recreate_swapchain(vk, app);
+                vk.swapchain_dirty = false;
+            }
+            render_and_sync(vk, app);
         }
 
         if (vk.failed) {
@@ -211,12 +250,20 @@ cleanup:
         vkDestroyFence(vk.vkdev.device, vk.renderer.in_flight, nullptr);
         vkDestroyCommandPool(vk.vkdev.device, vk.renderer.command_pool, nullptr);
         vkDeviceWaitIdle(vk.vkdev.device);
+
         if (vk.pending_destroy_swapchain != VK_NULL_HANDLE) {
             for (uint32_t i = 0; i < vk.pending_destroy_count; i++) {
                 vkDestroyImageView(vk.vkdev.device, vk.pending_destroy_views[i], nullptr);
             }
             vkDestroySwapchainKHR(vk.vkdev.device, vk.pending_destroy_swapchain, nullptr);
         }
+
+        for (uint32_t i = 0; i < vk.swapchain.image_count; i++) {
+            vkDestroyImageView(vk.vkdev.device, vk.swapchain.views[i], nullptr);
+        }
+        vkDestroySwapchainKHR(vk.vkdev.device, vk.swapchain.handle, nullptr);
+        destroy_atlas(vk.vkdev, vk.atlas);     // ← ADD THIS LINE
+
 
         vkDestroyDevice(vk.vkdev.device, nullptr);
     }

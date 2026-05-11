@@ -19,6 +19,7 @@ add_executable(axylith
     src/renderer.cpp
     src/pipeline.cpp
     src/font.cpp
+    src/atlas.cpp
 
 )
 

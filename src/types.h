@@ -8,7 +8,7 @@
 #include <vulkan/vulkan.h>
 #include "renderer.h"
 #include "pipeline.h"
-
+#include "atlas.h"
 
 inline void print_resource_usage() {
     // RAM from /proc/self/status
@@ -65,6 +65,7 @@ struct VulkanState {
     Swapchain swapchain{};
     Renderer renderer{};
     Pipeline pipeline{};
+    Atlas atlas{};
     std::atomic<bool> ready{false};
     std::atomic<bool> failed{false};
     bool swapchain_dirty = false;
