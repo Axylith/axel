@@ -108,7 +108,7 @@ The software is free for individuals, students, and researchers. **Commercial li
 
 ## Founding team
 
-Axylith is built by a small founding team based out of Calgary. We're hiring contributors and looking for early users. Reach us at founders@axylith.com.
+Axylith is built by a small founding team based out of Calgary. We're looking for early users. Reach us at founders@axylith.com.
 
 <!-- Add founder names, roles, and links here when ready to make public -->
 
