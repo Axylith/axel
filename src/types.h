@@ -9,6 +9,7 @@
 #include "renderer.h"
 #include "pipeline.h"
 #include "atlas.h"
+#include "text.h"
 
 inline void print_resource_usage() {
     // RAM from /proc/self/status
@@ -72,6 +73,7 @@ struct VulkanState {
     VkSwapchainKHR pending_destroy_swapchain = VK_NULL_HANDLE;
     VkImageView pending_destroy_views[8] = {};
     uint32_t pending_destroy_count = 0;
+    TextPipeline text{};
 };
 
 

@@ -5,6 +5,7 @@
 #include "swapchain.h"
 #include "font.h"
 #include "atlas.h"
+#include "text.h"
 #include <cstdio>
 #include <X11/keysym.h>
 #include <X11/Xlib.h>
@@ -24,7 +25,8 @@ static int x_io_error_handler(Display*) {
 }
 
 static void render_and_sync(VulkanState& vk, AppWindow& app) {
-    render_frame(vk.renderer, vk.vkdev, vk.swapchain, vk.pipeline);
+    render_frame(vk.renderer, vk.vkdev, vk.swapchain, vk.pipeline,
+                 vk.text, vk.atlas);    // ← add these
     if (app.sync_pending) {
         vkDeviceWaitIdle(vk.vkdev.device);
         XSyncSetCounter(app.display, app.sync_counter, app.sync_value);
@@ -87,11 +89,26 @@ int main(int, char**){
         vk.renderer = create_renderer(vk.vkdev, vk.gpu, vk.pipeline);
 
         vk.atlas = create_atlas(vk.vkdev, vk.gpu, "../assets/jetbrains_mono.bin");
-        if (vk.atlas.width == 0) {
+        if (vk.atlas.image == VK_NULL_HANDLE) {
             fprintf(stderr, "[atlas] Failed to create atlas\n");
             vk.failed = true;
             return;
         }
+
+        // NEW: Create text pipeline
+        vk.text = create_text_pipeline(vk.vkdev.device,
+                                       vk.swapchain.format,
+                                       vk.atlas.set_layout,
+                                       vk.gpu,
+                                       1024);  // max 1024 glyphs
+        if (vk.text.handle == VK_NULL_HANDLE) {
+            fprintf(stderr, "[text] Failed to create text pipeline\n");
+            vk.failed = true;
+            return;
+        }
+
+        printf("[timer] %-40s %.3f ms\n", "TOTAL INIT", total.elapsed_ms());
+        vk.ready = true;
 
 
         printf("[timer] %-40s %.3f ms\n", "TOTAL INIT", total.elapsed_ms());
@@ -117,6 +134,23 @@ int main(int, char**){
         if (space) printf("[test] ' ': advance=%.3f (whitespace, no quad)\n", space->advance);
     }
 
+
+    // Wait for init to finish so vk.text exists
+    while (!vk.ready.load() && !vk.failed.load()) {
+        usleep(1000);
+    }
+    if (vk.failed.load()) {
+        fprintf(stderr, "[main] Init failed, exiting\n");
+        return 1;
+    }
+
+    // Build text vertices for "Hello, world."
+    build_text_vertices(vk.text, font,
+                        "Hello, world.",
+                        50.0f, 100.0f,    // position in pixels (x, y from top-left)
+                        48.0f,            // size in pixels
+                        1.0f, 1.0f, 1.0f, 1.0f);  // white
+    printf("[text] Built %u glyphs for 'Hello, world.'\n", vk.text.glyph_count);
 
    XSetIOErrorHandler(x_io_error_handler);
 
@@ -262,6 +296,9 @@ cleanup:
             vkDestroyImageView(vk.vkdev.device, vk.swapchain.views[i], nullptr);
         }
         vkDestroySwapchainKHR(vk.vkdev.device, vk.swapchain.handle, nullptr);
+        
+        destroy_text_pipeline(vk.vkdev.device, vk.text);   // ← ADD
+
         destroy_atlas(vk.vkdev, vk.atlas);     // ← ADD THIS LINE
 
 
