@@ -45,7 +45,8 @@ AppWindow create_window(int width, int height){
         width, height,              // Size
         1,                          // Border size
         WhitePixel(app.display, screen),    // Border color
-        BlackPixel(app.display, screen)     // Background color
+        0
+        //BlackPixel(app.display, screen)     // Background color
     );
 
     
