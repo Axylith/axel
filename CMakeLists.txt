@@ -21,6 +21,7 @@ add_executable(axylith
     src/font.cpp
     src/atlas.cpp
     src/text.cpp
+    src/editor.cpp
 
 
 )
@@ -60,6 +61,12 @@ if(GLSLC)
         ${CMAKE_BINARY_DIR}/shaders/quad.frag.spv
         ${CMAKE_BINARY_DIR}/shaders/text.vert.spv
         ${CMAKE_BINARY_DIR}/shaders/text.frag.spv
+    )
+    add_custom_command(TARGET axylith POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/assets
+                $<TARGET_FILE_DIR:axylith>/assets
+        COMMENT "Copying assets to build directory"
     )
     add_dependencies(axylith shaders)
 endif()
