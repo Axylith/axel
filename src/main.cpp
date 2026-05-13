@@ -12,6 +12,9 @@
 #include <unistd.h>
 #include <thread>
 #include <csetjmp>
+#include "editor.h"
+#include "metrics.h"
+#include <clocale>
 
 
 static jmp_buf x_error_jmp;
@@ -35,11 +38,22 @@ static void render_and_sync(VulkanState& vk, AppWindow& app) {
     }
 }
 
-int main(int, char**){
+int main(int argc, char** argv){
+    setlocale(LC_ALL, "");
+    XSetLocaleModifiers("");
     XInitThreads();
 
     Timer t;
     Timer total;
+    Editor editor;
+    editor_ensure_data_dir(editor);
+    Metrics metrics;
+    Timer   frame_timer;
+    if (argc > 1) {
+        editor.path = argv[1];
+        
+    }
+
 
     double last_sample_ms = 0.0;
     constexpr double MONITOR_INTERVAL_MS = 1000.0;
@@ -88,7 +102,7 @@ int main(int, char**){
 
         vk.renderer = create_renderer(vk.vkdev, vk.gpu, vk.pipeline);
 
-        vk.atlas = create_atlas(vk.vkdev, vk.gpu, "../assets/jetbrains_mono.bin");
+        vk.atlas = create_atlas(vk.vkdev, vk.gpu, exe_relative("assets/jetbrains_mono.bin"));
         if (vk.atlas.image == VK_NULL_HANDLE) {
             fprintf(stderr, "[atlas] Failed to create atlas\n");
             vk.failed = true;
@@ -111,16 +125,12 @@ int main(int, char**){
         vk.ready = true;
 
 
-        printf("[timer] %-40s %.3f ms\n", "TOTAL INIT", total.elapsed_ms());
-        vk.ready = true;
-
-
     });
 
     Timer monitor_timer;
 
     AxylFont font;
-    if (font_load_metadata(font, "../assets/jetbrains_mono.json")) {
+    if (font_load_metadata(font, exe_relative("assets/jetbrains_mono.json"))) {
         // Sample a few glyphs
         const Glyph* a = font_get_glyph(font, 'A');
         const Glyph* hash = font_get_glyph(font, '#');
@@ -133,6 +143,9 @@ int main(int, char**){
         if (hash) printf("[test] '#': advance=%.3f\n", hash->advance);
         if (space) printf("[test] ' ': advance=%.3f (whitespace, no quad)\n", space->advance);
     }
+    if (argc > 1) {
+        editor_load(editor);
+    }
 
 
     // Wait for init to finish so vk.text exists
@@ -143,14 +156,6 @@ int main(int, char**){
         fprintf(stderr, "[main] Init failed, exiting\n");
         return 1;
     }
-
-    // Build text vertices for "Hello, world."
-    build_text_vertices(vk.text, font,
-                        "Hello, world.",
-                        50.0f, 100.0f,    // position in pixels (x, y from top-left)
-                        48.0f,            // size in pixels
-                        1.0f, 1.0f, 1.0f, 1.0f);  // white
-    printf("[text] Built %u glyphs for 'Hello, world.'\n", vk.text.glyph_count);
 
    XSetIOErrorHandler(x_io_error_handler);
 
@@ -169,9 +174,43 @@ int main(int, char**){
 
             switch (ev.type){
                 case KeyPress: {
-                    KeySym key = XLookupKeysym(&ev.xkey, 0);
-                    if (key == XK_Escape){
-                        app.running = false;
+                    char buf[64];
+                    KeySym keysym = 0;
+                    Status status = 0;
+                    int n = Xutf8LookupString(app.xic, &ev.xkey,
+                                              buf, sizeof(buf) - 1,
+                                              &keysym, &status);
+                    buf[n] = '\0';
+
+                    bool ctrl = (ev.xkey.state & ControlMask) != 0;
+                    bool handled = false;
+
+                    if (status == XLookupKeySym || status == XLookupBoth) {
+                        // Ctrl-modified shortcuts first
+                        if (ctrl) {
+                            switch (keysym) {
+                                case XK_s: case XK_S:
+                                    editor_save(editor); handled = true; break;
+                                case XK_o: case XK_O:
+                                    editor_load(editor); handled = true; break;
+                                default: break;
+                            }
+                        }
+                        if (!handled) {
+                            switch (keysym) {
+                                case XK_Escape:    app.running = false;                       handled = true; break;
+                                case XK_BackSpace: editor_backspace(editor);                  handled = true; break;
+                                case XK_Return:    editor_newline(editor);                    handled = true; break;
+                                case XK_Tab:       editor_insert_utf8(editor, "\t", 1);       handled = true; break;
+                                case XK_F1:        metrics.visible = !metrics.visible;        handled = true; break;
+                                default: break;
+                            }
+                        }
+                    }
+                    if (!handled && (status == XLookupChars || status == XLookupBoth)) {
+                        // Ctrl + letter would otherwise produce a control byte (e.g. ^S=0x13).
+                        // Suppress those — only insert printable chars when no ctrl held.
+                        if (!ctrl) editor_insert_utf8(editor, buf, n);
                     }
                     break;
                 }
@@ -223,23 +262,91 @@ int main(int, char**){
             }
         }
 
+        if (vk.ready.load()) {
+            // Rebuild editor text only when the buffer changed.
+            if (editor.dirty) {
+                build_text_vertices(vk.text, font,
+                    editor.text.c_str(),
+                    50.0f, 80.0f, 18.0f,    // x=50, baseline=80, 18px text
+                    0.92f, 0.92f, 0.94f, 1.0f);
+                append_cursor_quad(vk.text, font, 1.0f, 1.0f, 1.0f, 1.0f);
+                editor.dirty = false;
+            } else {
+                // No editor change — but we still need to reset glyph_count
+                // before appending the HUD this frame. Re-run with same text.
+                build_text_vertices(vk.text, font,
+                    editor.text.c_str(),
+                    50.0f, 80.0f, 18.0f,    // x=50, baseline=80, 18px text
+                    0.92f, 0.92f, 0.94f, 1.0f);
+                append_cursor_quad(vk.text, font, 1.0f, 1.0f, 1.0f, 1.0f);
+            }
+        
+            // Append HUD line at bottom, 14px, dimmed.
+            if (metrics.visible) {
+                char hud[256];
+                metrics.glyph_count = vk.text.glyph_count;
+                metrics.format(hud, sizeof(hud));
+
+                float saved_pen   = vk.text.pen_x;
+                float saved_base  = vk.text.baseline_y;
+                float saved_size  = vk.text.pixel_size;
+
+                // Line 1 (above): filename + modified marker + status message
+                char title[160];
+                const char* st = editor_get_status(editor, 3.0);
+                snprintf(title, sizeof(title), "%s%s%s%s",
+                         editor.path.c_str(),
+                         editor.modified ? "*" : "",
+                         st ? "  -  " : "",
+                         st ? st : "");
+                append_text_run(vk.text, font, title,
+                                12.0f, (float)app.height - 28.0f, 14.0f,
+                                0.85f, 0.85f, 0.85f, 0.9f);
+                
+                // Line 2 (below): perf metrics
+                append_text_run(vk.text, font, hud,
+                                12.0f, (float)app.height - 8.0f, 14.0f,
+                                0.6f, 0.85f, 0.6f, 0.9f);
+                
+                vk.text.pen_x      = saved_pen;
+                vk.text.baseline_y = saved_base;
+                vk.text.pixel_size = saved_size;
+            }
+        }
+        
         if (resize_pending) {
             double now = monitor_timer.elapsed_ms();
-            if ((now - last_resize_time_ms) >= 50.0) {  // 50ms quiet period
+            if ((now - last_resize_time_ms) >= 50.0) {
                 if (vk.ready.load()) {
                     recreate_swapchain(vk, app);
-                    render_and_sync(vk, app);
+                    //render_and_sync(vk, app);
                 }
                 resize_pending = false;
             }
-            // While resize is pending, skip normal render entirely
         } else if (vk.ready.load()) {
-            // Normal render path
             if (vk.swapchain_dirty) {
                 recreate_swapchain(vk, app);
                 vk.swapchain_dirty = false;
             }
             render_and_sync(vk, app);
+            if (vk.renderer.swapchain_dirty_local) {
+                vk.swapchain_dirty = true;
+                vk.renderer.swapchain_dirty_local = false;
+            }
+        } else {
+            usleep(16000);   // pre-ready idle
+        }
+
+        double frame_ms = frame_timer.elapsed_ms();
+        frame_timer = Timer{};
+        metrics.on_frame(frame_ms);
+
+        if (editor.measure_pending) {
+            auto now = std::chrono::steady_clock::now();
+            auto us  = std::chrono::duration_cast<std::chrono::microseconds>(
+                         now - editor.last_input).count();
+            metrics.on_input((double)us);
+            editor.measure_pending = false;
         }
 
         if (vk.failed) {
@@ -247,10 +354,10 @@ int main(int, char**){
             app.running = false;
         }
 
-        double now = monitor_timer.elapsed_ms();
-        if (now - last_sample_ms >= 1000.0) {
-            monitor.sample(now);
-            last_sample_ms = now;
+        double now_ms = monitor_timer.elapsed_ms();
+        if (now_ms - last_sample_ms >= MONITOR_INTERVAL_MS) {
+            monitor.sample(now_ms);
+            last_sample_ms = now_ms;
         }
 
         if (!vk.ready) {
@@ -261,6 +368,7 @@ int main(int, char**){
                 vk.swapchain_dirty = false;
             }
             render_and_sync(vk, app);
+
             if (vk.renderer.swapchain_dirty_local) {
                 vk.swapchain_dirty = true;
                 vk.renderer.swapchain_dirty_local = false;
@@ -310,6 +418,8 @@ cleanup:
     // Only touch X11 if connection is still alive
     if (!x_connection_lost) {
         XSyncDestroyCounter(app.display, app.sync_counter);
+        if (app.xic) { XDestroyIC(app.xic); app.xic = nullptr; }
+        if (app.xim) { XCloseIM(app.xim);  app.xim = nullptr; }
         XDestroyWindow(app.display, app.window);
         XSync(app.display, False);
         //Note: XCloseDisplay can race with NVIDIA driver shutdown
