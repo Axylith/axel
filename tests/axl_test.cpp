@@ -17,9 +17,11 @@ static int tests_passed = 0;
 
 
 
-#define TEST(name) \ 
-    tests_run++; \
-    printf(" [TEST] %-40s ", name);
+#define TEST(name) \
+    do { \
+        tests_run++; \
+        printf(" [TEST] %-40s ", name); \
+    } while(0)
 
 #define ASSERT(cond) \
     if (!(cond)) {\
