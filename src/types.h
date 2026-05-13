@@ -199,7 +199,7 @@ namespace axel {
     
 
     constexpr uint32_t decode_delta(uint16_t encoded){
-        uint8_t tier = ((uint8_t)encoded) >> 14;
+        uint8_t tier = (uint8_t)(encoded >> 14);
         uint16_t value = encoded & 0x3FFF;
 
         switch (tier)
