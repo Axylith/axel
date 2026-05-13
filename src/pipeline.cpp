@@ -1,25 +1,97 @@
 #include "pipeline.h"
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <errno.h>
+
+#include <unistd.h>     // readlink
+#include <libgen.h>     // dirname
+#include <climits>      // PATH_MAX
+
+const char* exe_relative(const char* relpath) {
+    static char buf[PATH_MAX *2 + 2];
+    static char exe_dir[PATH_MAX];
+    static bool initialized = false;
+
+    if (!initialized) {
+        ssize_t n = readlink("/proc/self/exe", exe_dir, sizeof(exe_dir) - 1);
+        if (n <= 0) {
+            fprintf(stderr, "[fs] readlink /proc/self/exe failed: %s\n", strerror(errno));
+            strcpy(exe_dir, ".");
+        } else {
+            exe_dir[n] = '\0';
+            // dirname() may modify its argument and uses static storage; copy result.
+            char tmp[PATH_MAX];
+            strcpy(tmp, exe_dir);
+            strcpy(exe_dir, dirname(tmp));
+        }
+        initialized = true;
+    }
+
+    snprintf(buf, sizeof(buf), "%s/%s", exe_dir, relpath);
+    return buf;
+}
+
 
 //Load SPIR-V file into memory
 static uint32_t* load_spirv(const char* path, size_t* size) {
+    *size = 0;
     FILE* f = fopen(path, "rb");
-
-    if (!f){
-        fprintf(stderr, "[shader] Failed to open: %s\n", path);
+    if (!f) {
+        fprintf(stderr, "[shader] fopen failed for '%s': %s (CWD-relative)\n",
+                path, strerror(errno));
         return nullptr;
     }
 
-    fseek(f, 0, SEEK_END);
-    *size = ftell(f);
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fprintf(stderr, "[shader] fseek end failed for '%s'\n", path);
+        fclose(f);
+        return nullptr;
+    }
+    long ftold = ftell(f);
+    if (ftold <= 0) {
+        fprintf(stderr, "[shader] '%s' is empty or ftell failed (got %ld)\n", path, ftold);
+        fclose(f);
+        return nullptr;
+    }
+    if ((ftold % 4) != 0) {
+        fprintf(stderr, "[shader] '%s' size %ld is not a multiple of 4 — not valid SPIR-V\n",
+                path, ftold);
+        fclose(f);
+        return nullptr;
+    }
     fseek(f, 0, SEEK_SET);
 
-    uint32_t* buffer = (uint32_t*)malloc(*size);
-    fread(buffer, 1, *size, f);
-    fclose(f);
-    return buffer;
+    uint32_t* buffer = (uint32_t*)malloc((size_t)ftold);
+    if (!buffer) {
+        fprintf(stderr, "[shader] malloc(%ld) failed for '%s'\n", ftold, path);
+        fclose(f);
+        return nullptr;
+    }
 
+    size_t got = fread(buffer, 1, (size_t)ftold, f);
+    fclose(f);
+    if (got != (size_t)ftold) {
+        fprintf(stderr, "[shader] short read for '%s': got %zu of %ld bytes\n",
+                path, got, ftold);
+        free(buffer);
+        return nullptr;
+    }
+
+    // SPIR-V starts with magic 0x07230203 in little-endian
+    if (buffer[0] != 0x07230203) {
+        fprintf(stderr, "[shader] '%s' bad magic 0x%08x (expected 0x07230203). Not SPIR-V?\n",
+                path, buffer[0]);
+        free(buffer);
+        return nullptr;
+    }
+
+    *size = (size_t)ftold;
+    printf("[shader] loaded '%s' (%zu bytes)\n", path, *size);
+    return buffer;
 }
 
 static VkShaderModule create_shader_module(VkDevice device, const uint32_t* code, size_t size){
@@ -37,9 +109,17 @@ static VkShaderModule create_shader_module(VkDevice device, const uint32_t* code
 Pipeline create_pipeline(VkDevice device, VkFormat color_format) {
     // Load shaders
     size_t vert_size, frag_size;
-    uint32_t* vert_code = load_spirv("shaders/quad.vert.spv", &vert_size);
-    uint32_t* frag_code = load_spirv("shaders/quad.frag.spv", &frag_size);
+    uint32_t* vert_code = load_spirv(exe_relative("shaders/quad.vert.spv"), &vert_size);
+    uint32_t* frag_code = load_spirv(exe_relative("shaders/quad.frag.spv"), &frag_size);
 
+    if (!vert_code || !frag_code) {
+        fprintf(stderr, "[pipeline] Failed to load shaders. CWD-relative path.\n");
+        free(vert_code);
+        free(frag_code);
+        Pipeline empty{};
+        return empty;
+    }
+    
     VkShaderModule vert_module = create_shader_module(device, vert_code, vert_size);
     VkShaderModule frag_module = create_shader_module(device, frag_code, frag_size);
 

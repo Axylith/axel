@@ -1,4 +1,5 @@
 #include "text.h"
+#include "pipeline.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -47,8 +48,8 @@ TextPipeline create_text_pipeline(VkDevice device,
 
     // --- Load shaders ---
     size_t vert_size, frag_size;
-    uint32_t* vert_code = load_spirv_text("shaders/text.vert.spv", &vert_size);
-    uint32_t* frag_code = load_spirv_text("shaders/text.frag.spv", &frag_size);
+    uint32_t* vert_code = load_spirv_text(exe_relative("shaders/text.vert.spv"), &vert_size);
+    uint32_t* frag_code = load_spirv_text(exe_relative("shaders/text.frag.spv"), &frag_size);
     if (!vert_code || !frag_code) {
         free(vert_code); free(frag_code);
         return tp;
@@ -272,91 +273,41 @@ TextPipeline create_text_pipeline(VkDevice device,
     return tp;
 }
 
-uint32_t build_text_vertices(TextPipeline& tp,
-                              const AxylFont& font,
-                              const char* utf8_text,
-                              float origin_x_px,
-                              float origin_y_px,
-                              float pixel_size,
-                              float r, float g, float b, float a) {
-    if (!tp.vertex_mapped) {
-        return 0;
-    }
 
-    TextVertex* verts = (TextVertex*)tp.vertex_mapped;
-    uint32_t glyph_index = 0;
+bool append_cursor_quad(TextPipeline& tp,
+                        const AxylFont& font,
+                        float r, float g, float b, float a) {
+    if (!tp.vertex_mapped || tp.glyph_count >= tp.max_glyphs) return false;
 
-    float cursor_x = origin_x_px;
-    float baseline_y = origin_y_px;
+    const Glyph* solid = font_get_glyph(font, 'M');
+    if (!solid) return false;
 
-    // Atlas dimensions in pixels — for normalizing atlas UVs to [0, 1]
     float atlas_w = (float)font.atlas_width;
     float atlas_h = (float)font.atlas_height;
 
-    for (const char* p = utf8_text; *p; p++) {
-        // ASCII-only for now (we'll handle multibyte UTF-8 later)
-        uint32_t codepoint = (uint8_t)*p;
+    // Center of M's atlas region — deep interior, MTSDF reads > 0.5 → opaque.
+    float ucx = 0.5f * (solid->atlas_left + solid->atlas_right) / atlas_w;
+    float vcy = 1.0f - 0.5f * (solid->atlas_top + solid->atlas_bottom) / atlas_h;
 
-        const Glyph* g_meta = font_get_glyph(font, codepoint);
-        if (!g_meta) {
-            // Unknown glyph — skip silently
-            continue;
-        }
+    float ps     = tp.pixel_size;
+    float top    = tp.baseline_y - font.ascender  * ps;
+    float bottom = tp.baseline_y - font.descender * ps;   // descender is negative
+    float x0     = tp.pen_x;
+    float x1     = x0 + 2.0f;                              // 2px wide
 
-        // Whitespace and glyphs with zero quad: just advance cursor
-        bool has_quad = (g_meta->plane_right > g_meta->plane_left) &&
-                        (g_meta->plane_top   > g_meta->plane_bottom);
+    TextVertex* verts = (TextVertex*)tp.vertex_mapped;
+    TextVertex* v     = &verts[tp.glyph_count * 6];
 
-        if (has_quad && glyph_index < tp.max_glyphs) {
-            // Compute screen-space quad corners
-            float x0 = cursor_x + g_meta->plane_left   * pixel_size;
-            float x1 = cursor_x + g_meta->plane_right  * pixel_size;
-            float y0 = baseline_y - g_meta->plane_top    * pixel_size;
-            float y1 = baseline_y - g_meta->plane_bottom * pixel_size;
+    auto set = [&](TextVertex& tv, float x, float y) {
+        tv.pos[0] = x;   tv.pos[1] = y;
+        tv.uv[0]  = ucx; tv.uv[1]  = vcy;
+        tv.color[0] = r; tv.color[1] = g; tv.color[2] = b; tv.color[3] = a;
+    };
+    set(v[0], x0, top);    set(v[1], x1, top);    set(v[2], x0, bottom);
+    set(v[3], x1, top);    set(v[4], x1, bottom); set(v[5], x0, bottom);
 
-            // Atlas UVs (msdf-atlas-gen uses bottom-up Y for atlas coords)
-            float u0 = g_meta->atlas_left   / atlas_w;
-            float u1 = g_meta->atlas_right  / atlas_w;
-            float v0 = 1.0f - g_meta->atlas_top    / atlas_h;
-            float v1 = 1.0f - g_meta->atlas_bottom / atlas_h;
-
-            TextVertex* v = &verts[glyph_index * 6];
-
-            // Triangle 1: top-left, top-right, bottom-left
-            v[0].pos[0] = x0; v[0].pos[1] = y0;
-            v[0].uv[0]  = u0; v[0].uv[1]  = v0;
-            v[0].color[0] = r; v[0].color[1] = g; v[0].color[2] = b; v[0].color[3] = a;
-
-            v[1].pos[0] = x1; v[1].pos[1] = y0;
-            v[1].uv[0]  = u1; v[1].uv[1]  = v0;
-            v[1].color[0] = r; v[1].color[1] = g; v[1].color[2] = b; v[1].color[3] = a;
-
-            v[2].pos[0] = x0; v[2].pos[1] = y1;
-            v[2].uv[0]  = u0; v[2].uv[1]  = v1;
-            v[2].color[0] = r; v[2].color[1] = g; v[2].color[2] = b; v[2].color[3] = a;
-
-            // Triangle 2: top-right, bottom-right, bottom-left
-            v[3].pos[0] = x1; v[3].pos[1] = y0;
-            v[3].uv[0]  = u1; v[3].uv[1]  = v0;
-            v[3].color[0] = r; v[3].color[1] = g; v[3].color[2] = b; v[3].color[3] = a;
-
-            v[4].pos[0] = x1; v[4].pos[1] = y1;
-            v[4].uv[0]  = u1; v[4].uv[1]  = v1;
-            v[4].color[0] = r; v[4].color[1] = g; v[4].color[2] = b; v[4].color[3] = a;
-
-            v[5].pos[0] = x0; v[5].pos[1] = y1;
-            v[5].uv[0]  = u0; v[5].uv[1]  = v1;
-            v[5].color[0] = r; v[5].color[1] = g; v[5].color[2] = b; v[5].color[3] = a;
-
-            glyph_index++;
-        }
-
-        // Advance cursor regardless (whitespace still advances)
-        cursor_x += g_meta->advance * pixel_size;
-    }
-
-    tp.glyph_count = glyph_index;
-    return glyph_index;
+    tp.glyph_count++;
+    return true;
 }
 
 void render_text(VkCommandBuffer cmd,
@@ -436,4 +387,89 @@ void destroy_text_pipeline(VkDevice device, TextPipeline& tp) {
         vkDestroyPipelineLayout(device, tp.layout, nullptr);
         tp.layout = VK_NULL_HANDLE;
     }
+}
+uint32_t append_text_run(TextPipeline& tp,
+                         const AxylFont& font,
+                         const char* utf8_text,
+                         float origin_x_px,
+                         float origin_y_px,
+                         float pixel_size,
+                         float r, float g, float b, float a) {
+    if (!tp.vertex_mapped) return tp.glyph_count;
+
+    TextVertex* verts = (TextVertex*)tp.vertex_mapped;
+    uint32_t    glyph_index = tp.glyph_count;
+
+    float cursor_x   = origin_x_px;
+    float baseline_y = origin_y_px;
+    float line_height = (font.ascender - font.descender) * pixel_size * 1.2f;
+    //                                                                 ^^^ 20% leading
+
+    float atlas_w = (float)font.atlas_width;
+    float atlas_h = (float)font.atlas_height;
+
+    for (const char* p = utf8_text; *p; p++) {
+        uint32_t codepoint = (uint8_t)*p;
+
+        // --- Newline handling: advance baseline, reset x, no glyph ---
+        if (codepoint == '\n') {
+            baseline_y += line_height;
+            cursor_x    = origin_x_px;
+            continue;
+        }
+
+        const Glyph* g_meta = font_get_glyph(font, codepoint);
+        if (!g_meta) continue;
+
+        bool has_quad = (g_meta->plane_right > g_meta->plane_left) &&
+                        (g_meta->plane_top   > g_meta->plane_bottom);
+
+        if (has_quad && glyph_index < tp.max_glyphs) {
+            float x0 = cursor_x   + g_meta->plane_left   * pixel_size;
+            float x1 = cursor_x   + g_meta->plane_right  * pixel_size;
+            float y0 = baseline_y - g_meta->plane_top    * pixel_size;
+            float y1 = baseline_y - g_meta->plane_bottom * pixel_size;
+
+            float u0 = g_meta->atlas_left  / atlas_w;
+            float u1 = g_meta->atlas_right / atlas_w;
+            float v0 = 1.0f - g_meta->atlas_top    / atlas_h;
+            float v1 = 1.0f - g_meta->atlas_bottom / atlas_h;
+
+            TextVertex* v = &verts[glyph_index * 6];
+            v[0].pos[0]=x0; v[0].pos[1]=y0; v[0].uv[0]=u0; v[0].uv[1]=v0;
+            v[1].pos[0]=x1; v[1].pos[1]=y0; v[1].uv[0]=u1; v[1].uv[1]=v0;
+            v[2].pos[0]=x0; v[2].pos[1]=y1; v[2].uv[0]=u0; v[2].uv[1]=v1;
+            v[3].pos[0]=x1; v[3].pos[1]=y0; v[3].uv[0]=u1; v[3].uv[1]=v0;
+            v[4].pos[0]=x1; v[4].pos[1]=y1; v[4].uv[0]=u1; v[4].uv[1]=v1;
+            v[5].pos[0]=x0; v[5].pos[1]=y1; v[5].uv[0]=u0; v[5].uv[1]=v1;
+
+            for (int i = 0; i < 6; i++) {
+                v[i].color[0] = r; v[i].color[1] = g;
+                v[i].color[2] = b; v[i].color[3] = a;
+            }
+
+            glyph_index++;
+        }
+
+        cursor_x += g_meta->advance * pixel_size;
+    }
+
+    tp.pen_x       = cursor_x;
+    tp.baseline_y  = baseline_y;
+    tp.pixel_size  = pixel_size;
+    tp.glyph_count = glyph_index;
+    return glyph_index;
+}
+
+uint32_t build_text_vertices (TextPipeline& tp,
+                             const AxylFont& font,
+                             const char* utf8_text,
+                             float origin_x_px,
+                             float origin_y_px,
+                             float pixel_size,
+                             float r, float g, float b, float a) {
+    tp.glyph_count = 0;       // reset, then append at index 0
+    return append_text_run(tp, font, utf8_text,
+                           origin_x_px, origin_y_px, pixel_size,
+                           r, g, b, a);
 }

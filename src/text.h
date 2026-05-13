@@ -28,6 +28,11 @@ struct TextPipeline {
 
     uint32_t         max_glyphs    = 0;
     uint32_t         glyph_count   = 0;  // glyphs in the buffer right now
+
+    float pen_x      = 0.0f;
+    float baseline_y = 0.0f;
+    float pixel_size = 0.0f;
+
 };
 
 // Push constants sent each draw. Must match text.vert/text.frag layout.
@@ -64,3 +69,17 @@ void render_text(VkCommandBuffer cmd,
                  uint32_t screen_width,
                  uint32_t screen_height,
                  float pixel_range);
+
+
+bool append_cursor_quad(TextPipeline& tp,
+                        const AxylFont& font,
+                        float r, float g, float b, float a);
+
+
+uint32_t append_text_run(TextPipeline& tp,
+                         const AxylFont& font,
+                         const char* utf8_text,
+                         float origin_x_px,
+                         float origin_y_px,
+                         float pixel_size,
+                         float r, float g, float b, float a);

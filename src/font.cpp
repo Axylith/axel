@@ -3,6 +3,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <errno.h>
+
 
 // ─── Mini JSON parser ──────────────────────────────────────────────────────
 //
@@ -166,16 +171,58 @@ bool font_load_metadata(AxylFont& font, const char* json_path) {
         fprintf(stderr, "[font] Failed to open %s\n", json_path);
         return false;
     }
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    char* buf = (char*)malloc(size + 1);
-    if (!buf) { fclose(f); return false; }
-    fread(buf, 1, size, f);
-    buf[size] = '\0';
-    fclose(f);
 
-    // Zero out the font; we'll fill in what's present
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fprintf(stderr, "[font] fseek end failed for %s\n", json_path);
+        fclose(f);
+        return false;
+    }
+
+    long ftold = ftell(f);
+    if (ftold < 0) {
+        fprintf(stderr, "[font] ftell failed for %s: %s\n",
+                json_path, strerror(errno));
+        fclose(f);
+        return false;
+    }
+    if (ftold == 0) {
+        fprintf(stderr, "[font] %s is empty\n", json_path);
+        fclose(f);
+        return false;
+    }
+    // Sanity cap. JetBrains Mono metadata is ~30KB; anything 16MB+
+    // is either wrong or malicious.
+    if (ftold > 16 * 1024 * 1024) {
+        fprintf(stderr, "[font] %s is unreasonably large (%ld bytes)\n",
+                json_path, ftold);
+        fclose(f);
+        return false;
+    }
+
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fprintf(stderr, "[font] fseek start failed for %s\n", json_path);
+        fclose(f);
+        return false;
+    }
+
+    size_t size = (size_t)ftold;
+    char* buf = (char*)malloc(size + 1);
+    if (!buf) {
+        fclose(f);
+        fprintf(stderr, "[font] malloc(%zu) failed\n", size + 1);
+        return false;
+    }
+
+    size_t got = fread(buf, 1, size, f);
+    fclose(f);
+    if (got != size) {
+        fprintf(stderr, "[font] short read for %s: got %zu of %zu\n",
+                json_path, got, size);
+        free(buf);
+        return false;
+    }
+    buf[size] = '\0';
+
     memset(&font, 0, sizeof(font));
 
     Cursor root = { buf, buf + size };

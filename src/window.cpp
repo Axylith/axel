@@ -60,7 +60,7 @@ AppWindow create_window(int width, int height){
         KeyPressMask |
         ButtonPressMask |
         ExposureMask |
-        StructureNotifyMask
+        StructureNotifyMask | FocusChangeMask
     );
         // Register WM_DELETE before mapping
     app.wm_delete = XInternAtom(app.display, "WM_DELETE_WINDOW", False);
@@ -88,6 +88,25 @@ AppWindow create_window(int width, int height){
     app.width = width;
     app.height = height;
     app.running = true;
+
+    app.xim = XOpenIM(app.display, nullptr, nullptr, nullptr);
+    if(!app.xim){
+        fprintf(stderr, "[x11] XOpenIM failed (locale supported?)\n");
+        app.running = false;
+        return app;
+    }
+
+    app.xic = XCreateIC(app.xim, XNInputStyle, XIMPreeditNothing | XIMStatusNothing, XNClientWindow, app.window, XNFocusWindow, app.window, nullptr);
+
+    if (!app.xic) {
+        fprintf(stderr, "[x11] XCreateIC failed\n");
+        XCloseIM(app.xim);
+        app.xim = nullptr;
+        app.running = false;
+        return app;
+    }
+    XSetICFocus(app.xic);
+    printf("[x11] XIM/XIC initialized\n"); fflush(stdout);
 
     return app;
     
