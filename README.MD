@@ -1,128 +1,130 @@
+<div align="center">
+
 # Axylith
 
+**A native research notebook. Single C++ binary. No Electron, no telemetry, no license server.**
+
+[Documentation](https://docs.axylith.com) · [File Format](https://docs.axylith.com/format) · [Strategy](https://github.com/Axylith/axle/blob/development/changelog.md) · [Sponsor](https://github.com/sponsors/Axylith)
+
+[![CI](https://github.com/Axylith/axle/actions/workflows/ci.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/ci.yml)
+[![Sanitizers](https://github.com/Axylith/axle/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/sanitizers.yml)
+[![CodeQL](https://github.com/Axylith/axle/actions/workflows/codeql.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/codeql.yml)
+[![Snyk](https://snyk.io/test/github/Axylith/axle/badge.svg)](https://snyk.io/test/github/Axylith/axle)
+[![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=Axylith_axle&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Axylith_axle)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/)
-[![Vulkan 1.3](https://img.shields.io/badge/Vulkan-1.3-red.svg)](https://www.vulkan.org/)
-[![Zero Dependencies](https://img.shields.io/badge/Dependencies-0-brightgreen.svg)](#)
 
-A local-first computational research workbench. Notebook, physics engine, FP64 computation, and local AI in a single C++ binary. Zero external dependencies. Offline by default.
-
-**Axylith replaces around $7,000/year of proprietary tooling with a single free binary.**
+</div>
 
 ---
 
-## What Axylith is
+Axylith is a research notebook implemented as a single native binary. The current build is a text editor with multi-line input, cursor movement, atomic save/load to a versioned file format, MTSDF text rendering through Vulkan 1.3, and a real-time HUD for input and frame latency.
 
-Axylith combines note-taking, verified computation, physics simulation, and AI annotation into one offline C++ binary. Every number is computed in FP64 and traceable to its source. Every AI output is grounded in local content, not hallucinated. Your data never leaves your machine unless you choose to sync it.
+The eventual goal — described in the [strategy document](https://github.com/Axylith/axle/blob/development/changelog.md) — is a computational research workbench that combines notes, deterministic numeric evaluation, physics simulation, and locally-run AI annotation. That product does not exist yet. This repository is the starting point.
 
-It is not a note-taking app. It is an IDE for thinking.
+## Status
 
-## Why this exists
+> **Pre-V1.** The editor is usable for typing, navigating, and saving plain UTF-8 text. None of the higher-level features (computation, physics, AI) have been implemented.
 
-Researchers and students are locked into proprietary tools that cost thousands of dollars a year and depend on license servers that go down. In May 2025, a ransomware attack took MATLAB offline for five million users for over a week. Students couldn't submit theses. Researchers couldn't open their own files. At least one person ended up pirating software they had already paid for because the license server was unreachable.
+What currently works:
 
-Axylith eliminates that dependency. No license server, no internet requirement, no subscription gating any feature. One binary, runs offline, forever.
+- Multi-line text editor with full cursor movement (arrows, Home/End, vertical navigation)
+- UTF-8 input via X11 input methods (correct Shift, AltGr, dead-key, and multibyte handling)
+- Atomic save and load through a 16-byte-headered `.axl` format, with plain-text fallback for any other UTF-8 file
+- MTSDF text rendering via a custom Vulkan 1.3 pipeline — resolution-independent, sub-pixel-accurate
+- On-screen HUD showing live frame time and keystroke-to-submit input latency
+- CI matrix across GCC 12, GCC 13, and Clang 17, with AddressSanitizer, UBSan, ThreadSanitizer, CodeQL, Snyk, and SonarCloud on every push
 
-## Key technical decisions
+What is deliberately not yet implemented:
 
-- **Language.** C++20 with one external header (`stb_truetype.h`). Everything else is written from scratch.
-- **Rendering.** Vulkan 1.3 with dynamic rendering — not Electron, not a web view.
-- **File format.** Custom `.axl` binary format, 12-byte blocks, two-stage compression (dictionary + static Huffman). An entire research career fits in roughly 9.8 MB.
-- **AI.** Custom inference engine with hand-written SIMD assembly (SSE4.2, AVX2, AVX-512, NEON). Runs locally on consumer hardware.
-- **Computation.** FP64 recursive-descent evaluator. Every number is computed, never hallucinated.
-- **Windowing.** Direct OS APIs (X11, Win32, Cocoa). No GLFW, no SDL.
-- **Observation.** Watches file changes, terminal output, and render results, and correlates them with your notes automatically.
+- Text selection · scroll viewport · mouse positioning · line wrap · find/replace · syntax highlighting
+- The computational layer (FP64 evaluator, symbolic math)
+- The physics engine
+- Local AI inference
+- Wayland, macOS, and Windows backends (Linux/X11 only for now)
 
-## Current progress
+The roadmap to V1 is in the [strategy document](https://github.com/Axylith/axle/blob/development/changelog.md).
 
-- 27/27 tests passing on the `.axl` binary format.
-- Vulkan 1.3 initialization through swapchain creation.
-- Threaded init — window appears in 0.3 ms, Vulkan loads in the background.
-- Per-session CPU, RAM, and GPU resource tracking.
-- CI across three providers (GitLab CI, GitHub Actions, CircleCI).
-- AddressSanitizer and UBSanitizer builds, plus clang-tidy static analysis.
+## Build
 
-## Building
+Linux only at present. Verified on Ubuntu 24.04, Arch, and Fedora.
 
 ```bash
-git clone https://github.com/Axylith/axel.git
-cd axel
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Debug
-make -j$(nproc)
-./axylith
+git clone https://github.com/Axylith/axle.git
+cd axle
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+./build/axylith
 ```
 
-Requires a C++20 compiler (GCC 13+ or Clang 16+), the Vulkan SDK, and X11 dev headers.
+Build dependencies (Ubuntu/Debian):
 
 ```bash
-# Ubuntu / Debian
-sudo apt install g++ cmake libvulkan-dev libx11-dev vulkan-validationlayers
-
-# Arch
-sudo pacman -S gcc cmake vulkan-devel libx11 vulkan-validation-layers
+sudo apt install -y \
+    build-essential cmake ninja-build \
+    libvulkan-dev vulkan-validationlayers \
+    libx11-dev libxext-dev \
+    glslc
 ```
 
-## Running tests
+For Arch and Fedora equivalents, plus a 5-minute walkthrough including first save and load, see [docs/quickstart](https://docs.axylith.com/quickstart).
+
+## Tests
 
 ```bash
 cd build
 ctest --output-on-failure
 ```
 
-## Project structure
+The test suite exercises the on-disk format. Sanitizers run in CI on every push.
+
+## Design principles
+
+These are the constraints the project has committed to. They are intended as load-bearing — features that violate them won't be merged.
+
+- **One native binary.** No Electron, no embedded browser, no JavaScript runtime. The build produces a stripped ELF measured in megabytes.
+- **One external dependency.** `stb_truetype.h`, header-only. Everything else (Vulkan, X11, libc) is a system library.
+- **Local-first.** Files on disk are the source of truth. No cloud account is required to use any feature. Network access is opt-in, never default.
+- **Plain UTF-8 with a small header.** The `.axl` format is readable in `cat`, diffable in `git`, recoverable without Axylith installed. Compression and encryption are not in v1.
+- **Honest latency.** Input latency and frame time are displayed in the HUD by code anyone can read. Numbers are measured, not estimated.
+
+## File format
+
+`.axl` is a 16-byte header followed by raw UTF-8 content. Files without the header are loaded as plain text. The format is specified in [docs/format](https://docs.axylith.com/format).
 
 ```
-src/
-  main.cpp           — entry point, event loop, threaded init
-  window.cpp/.h      — X11 windowing
-  vulkan_init.cpp/.h — Vulkan instance, surface, GPU, device
-  swapchain.cpp/.h   — swapchain creation and image views
-  renderer.cpp/.h    — command pool, sync objects, render loop
-  monitor.h          — CPU / RAM / GPU resource tracking
-  types.h            — shared structs, timer, format types
-tests/
-  axl_test.cpp       — .axl format tests (27/27 passing)
+$ od -An -tx1 -N 16 untitled.axl
+ 41 58 4c 00  01 00  00 00  00 00 00 00 00 00 00 00
+   A  X  L \0   v1     reserved (zeros)
+$ tail -c +17 untitled.axl
+hello world
 ```
 
-## Repositories
-
-| Repository | Description | License |
-| --- | --- | --- |
-| [axylith](https://github.com/Axylith/axel) | Notebook application | AGPL v3 |
-| [axylith-physics](https://gitlab.com/axylith/axylith-physics) | Physics and simulation engine | AGPL v3 |
-
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. All contributions require agreement to our CLA. First-time contributors are welcome — look for issues labeled `good first issue` or `mentored`.
-
-If you find a security issue, please email security@axylith.com rather than filing a public issue.
+A v2 structured format (`AXLE` magic, 32-byte header) is specified and unit-tested but not yet emitted by the editor. Readers will support both before writers switch.
 
 ## License
 
-Axylith is licensed under **AGPL v3**. See [LICENSE](LICENSE) for full text.
+Axylith is licensed under the [GNU Affero General Public License v3](LICENSE). The editor binary, the file format, and all included subsystems are free software.
 
-The software is free for individuals, students, and researchers. **Commercial licenses** are available for organizations that cannot comply with AGPL. Contact founders@axylith.com.
+A commercial license is available for organizations that cannot comply with AGPL. Contact `founders@axylith.com`.
+
+The companion [physics engine repository](https://github.com/Axylith/axylith-physics) (when published) will use BSL-1.1 with a conversion to Apache-2.0. See the [strategy document](https://github.com/Axylith/axle/blob/development/changelog.md) for the full licensing rationale.
+
+## Contributing
+
+Contributions are welcome. The active development line is the `development` branch; `main` tracks released versions.
+
+Before opening a pull request, please read [CONTRIBUTING.md](CONTRIBUTING.MD) and the [Code of Conduct](CODE_OF_CONDUCT.MD). A CLA is required.
+
+First-time contributors: look for issues labeled `good first issue` or `mentored`.
+
+## Acknowledgements
+
+Axylith is built by [Dev Bhatt](https://devbhatt.dev) and contributors. The project uses font atlas data derived from [JetBrains Mono](https://www.jetbrains.com/lp/mono/) and the MTSDF baking technique described by Viktor Chlumský.
 
 ---
 
-## Founding team
+<div align="center">
 
-Axylith is built by a small founding team based out of Calgary. We're looking for early users. Reach us at founders@axylith.com.
+If you find this project worth supporting, please consider [sponsoring on GitHub](https://github.com/sponsors/Axylith) or becoming a backer on [Open Collective](https://opencollective.com/axylith).
 
-<!-- Add founder names, roles, and links here when ready to make public -->
-
-## Powered by
-
-[![Snyk](https://img.shields.io/badge/Security-Snyk-4C4A73?logo=snyk)](https://snyk.io/)
-[![SonarCloud](https://img.shields.io/badge/Quality-SonarCloud-F3702A?logo=sonarcloud)](https://sonarcloud.io/)
-[![Cloudflare](https://img.shields.io/badge/Edge-Cloudflare-F38020?logo=cloudflare)](https://www.cloudflare.com/)
-[![GitLab](https://img.shields.io/badge/CI-GitLab-FC6D26?logo=gitlab)](https://gitlab.com/)
-[![CircleCI](https://img.shields.io/badge/CI-CircleCI-343434?logo=circleci)](https://circleci.com/)
-
-## Sponsors and backers
-
-Axylith is supported by the community. If the project is useful to you, please consider [sponsoring on GitHub](https://github.com/sponsors/Axylith) or [backing us on Open Collective](https://opencollective.com/axylith).
-
-<a href="https://opencollective.com/axylith"><img src="https://opencollective.com/axylith/sponsors.svg?width=890" /></a>
-<a href="https://opencollective.com/axylith"><img src="https://opencollective.com/axylith/backers.svg?width=890" /></a>
+</div>
