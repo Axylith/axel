@@ -10,7 +10,6 @@
 [![Sanitizers](https://github.com/Axylith/axle/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/sanitizers.yml)
 [![CodeQL](https://github.com/Axylith/axle/actions/workflows/codeql.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/codeql.yml)
 [![Snyk](https://snyk.io/test/github/Axylith/axle/badge.svg)](https://snyk.io/test/github/Axylith/axle)
-[![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=Axylith_axle&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Axylith_axle)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 </div>
