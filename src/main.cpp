@@ -49,6 +49,8 @@ int main(int argc, char** argv){
     editor_ensure_data_dir(editor);
     Metrics metrics;
     Timer   frame_timer;
+    float offset_x = 0.25; //0 = right border
+    float offset_y = 0.20; //0 = top border
     if (argc > 1) {
         editor.path = argv[1];
         
@@ -203,6 +205,15 @@ int main(int argc, char** argv){
                                 case XK_Return:    editor_newline(editor);                    handled = true; break;
                                 case XK_Tab:       editor_insert_utf8(editor, "\t", 1);       handled = true; break;
                                 case XK_F1:        metrics.visible = !metrics.visible;        handled = true; break;
+                                
+                                // --- Cursor movement ---
+                                case XK_Left:      editor_move_left(editor);                  handled = true; break;
+                                case XK_Right:     editor_move_right(editor);                 handled = true; break;
+                                case XK_Up:        editor_move_up(editor);                    handled = true; break;
+                                case XK_Down:      editor_move_down(editor);                  handled = true; break;
+                                case XK_Home:      editor_move_home(editor);                  handled = true; break;
+                                case XK_End:       editor_move_end(editor);                   handled = true; break;
+                                
                                 default: break;
                             }
                         }
@@ -265,18 +276,18 @@ int main(int argc, char** argv){
         if (vk.ready.load()) {
             // Rebuild editor text only when the buffer changed.
             if (editor.dirty) {
-                build_text_vertices(vk.text, font,
-                    editor.text.c_str(),
-                    50.0f, 80.0f, 18.0f,    // x=50, baseline=80, 18px text
+                build_text_vertices_with_cursor(vk.text, font,
+                    editor.text.c_str(), editor.cursor,
+                    ((float)((1 + (offset_x-1))/2)*app.width), ((float)((1 + (offset_y-1))/2)*app.height), 18.0f,    // x=50, baseline=80, 18px text
                     0.92f, 0.92f, 0.94f, 1.0f);
                 append_cursor_quad(vk.text, font, 1.0f, 1.0f, 1.0f, 1.0f);
                 editor.dirty = false;
             } else {
                 // No editor change — but we still need to reset glyph_count
                 // before appending the HUD this frame. Re-run with same text.
-                build_text_vertices(vk.text, font,
-                    editor.text.c_str(),
-                    50.0f, 80.0f, 18.0f,    // x=50, baseline=80, 18px text
+                build_text_vertices_with_cursor(vk.text, font,
+                    editor.text.c_str(), editor.cursor,
+                    ((float)((1 + (offset_x-1))/2)*app.width), ((float)((1 + (offset_y-1))/2)*app.height), 18.0f,    // x=50, baseline=80, 18px text
                     0.92f, 0.92f, 0.94f, 1.0f);
                 append_cursor_quad(vk.text, font, 1.0f, 1.0f, 1.0f, 1.0f);
             }

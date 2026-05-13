@@ -32,6 +32,8 @@ struct TextPipeline {
     float pen_x      = 0.0f;
     float baseline_y = 0.0f;
     float pixel_size = 0.0f;
+    float cursor_pen_x      = 0.0f;
+    float cursor_baseline_y = 0.0f;
 
 };
 
@@ -83,3 +85,17 @@ uint32_t append_text_run(TextPipeline& tp,
                          float origin_y_px,
                          float pixel_size,
                          float r, float g, float b, float a);
+
+
+uint32_t build_text_vertices_with_cursor(TextPipeline& tp,
+                                          const AxylFont& font,
+                                          const char* utf8_text,
+                                          size_t cursor_byte_offset,
+                                          float origin_x_px,
+                                          float origin_y_px,
+                                          float pixel_size,
+                                          float r, float g, float b, float a);
+
+bool append_cursor_quad(TextPipeline& tp,
+                        const AxylFont& font,
+                        float r, float g, float b, float a);

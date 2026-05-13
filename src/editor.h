@@ -6,6 +6,7 @@ struct Editor {
     std::string text;
     bool dirty = true;
     bool modified = false;
+    size_t cursor = 0;
     std::string path = "../data/untitled.axl";
 
     std::string status;
@@ -29,3 +30,10 @@ const char* editor_get_status(const Editor& e, double max_age_seconds = 3.0);
 
 void editor_newline(Editor& e);
 void editor_ensure_data_dir(const Editor& e);
+
+void editor_move_left  (Editor& e);
+void editor_move_right (Editor& e);
+void editor_move_up    (Editor& e);
+void editor_move_down  (Editor& e);
+void editor_move_home  (Editor& e);
+void editor_move_end   (Editor& e);
