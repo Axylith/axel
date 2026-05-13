@@ -4,6 +4,8 @@
 #include "swapchain.h"
 #include "vulkan_init.h"
 #include "pipeline.h"
+#include "text.h"
+#include "atlas.h"
 
 struct Renderer {
     VkCommandPool command_pool;
@@ -17,4 +19,6 @@ struct Renderer {
 };
 
 Renderer create_renderer(VulkanDevice& vkdev, GPU& gpu, Pipeline& pipeline);
-void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc, Pipeline& pipeline);
+void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc,
+                  Pipeline& pipeline,
+                  TextPipeline& text, Atlas& atlas);

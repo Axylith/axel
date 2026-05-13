@@ -7,3 +7,4 @@ struct Pipeline {
 };
 
 Pipeline create_pipeline(VkDevice device, VkFormat color_format);
+const char* exe_relative(const char* relpath);

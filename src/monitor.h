@@ -67,7 +67,7 @@ struct ResourceMonitor {
 
             long tick_delta = (utime + stime) - (prev_utime + prev_stime);
             double ms_per_tick = 1000.0 / (double)ticks_per_sec;
-            double cpu_time_ms = tick_delta * ms_per_tick;
+            double cpu_time_ms = (double)tick_delta * ms_per_tick;
             cpu = (cpu_time_ms / time_delta) * 100.0;
 
             if (cpu < 0.0) cpu = 0.0;

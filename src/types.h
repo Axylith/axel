@@ -8,7 +8,8 @@
 #include <vulkan/vulkan.h>
 #include "renderer.h"
 #include "pipeline.h"
-
+#include "atlas.h"
+#include "text.h"
 
 inline void print_resource_usage() {
     // RAM from /proc/self/status
@@ -65,12 +66,14 @@ struct VulkanState {
     Swapchain swapchain{};
     Renderer renderer{};
     Pipeline pipeline{};
+    Atlas atlas{};
     std::atomic<bool> ready{false};
     std::atomic<bool> failed{false};
     bool swapchain_dirty = false;
     VkSwapchainKHR pending_destroy_swapchain = VK_NULL_HANDLE;
     VkImageView pending_destroy_views[8] = {};
     uint32_t pending_destroy_count = 0;
+    TextPipeline text{};
 };
 
 
@@ -131,7 +134,7 @@ namespace axel {
         uint8_t color;          // 1 byte
     };
     // Total 10 bytes
-    #pragma pack(pop);
+    #pragma pack(pop)
     static_assert(sizeof(Project) == 10, "Project is 10 bytes");
 
     constexpr uint32_t PROJECT_COLORS[] = {
@@ -185,7 +188,7 @@ namespace axel {
 
     constexpr uint16_t encode_delta(uint32_t minutes_since_base){
         if(minutes_since_base < 16384)
-            return minutes_since_base;
+            return (uint16_t)minutes_since_base;
         uint32_t hours = minutes_since_base / 60;
         if(hours < 16384) return (0b01 << 14) | (uint16_t)hours;
         uint32_t days = minutes_since_base/1440;
@@ -196,7 +199,7 @@ namespace axel {
     
 
     constexpr uint32_t decode_delta(uint16_t encoded){
-        uint8_t tier = encoded >> 14;
+        uint8_t tier = (uint8_t)(encoded >> 14);
         uint16_t value = encoded & 0x3FFF;
 
         switch (tier)

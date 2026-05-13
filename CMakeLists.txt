@@ -19,10 +19,15 @@ add_executable(axylith
     src/renderer.cpp
     src/pipeline.cpp
     src/font.cpp
+    src/atlas.cpp
+    src/text.cpp
+    src/editor.cpp
+
 
 )
 
 # After add_executable
+# ─── Shaders ──────────────────────────────────────────
 find_program(GLSLC glslc)
 if(GLSLC)
     add_custom_command(
@@ -38,13 +43,33 @@ if(GLSLC)
                 -o ${CMAKE_BINARY_DIR}/shaders/quad.frag.spv
         DEPENDS ${CMAKE_SOURCE_DIR}/shaders/quad.frag
     )
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/shaders/text.vert.spv
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
+        COMMAND ${GLSLC} ${CMAKE_SOURCE_DIR}/shaders/text.vert
+                -o ${CMAKE_BINARY_DIR}/shaders/text.vert.spv
+        DEPENDS ${CMAKE_SOURCE_DIR}/shaders/text.vert
+    )
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/shaders/text.frag.spv
+        COMMAND ${GLSLC} ${CMAKE_SOURCE_DIR}/shaders/text.frag
+                -o ${CMAKE_BINARY_DIR}/shaders/text.frag.spv
+        DEPENDS ${CMAKE_SOURCE_DIR}/shaders/text.frag
+    )
     add_custom_target(shaders ALL DEPENDS
         ${CMAKE_BINARY_DIR}/shaders/quad.vert.spv
         ${CMAKE_BINARY_DIR}/shaders/quad.frag.spv
+        ${CMAKE_BINARY_DIR}/shaders/text.vert.spv
+        ${CMAKE_BINARY_DIR}/shaders/text.frag.spv
+    )
+    add_custom_command(TARGET axylith POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/assets
+                $<TARGET_FILE_DIR:axylith>/assets
+        COMMENT "Copying assets to build directory"
     )
     add_dependencies(axylith shaders)
 endif()
-
 
 target_include_directories(axylith PRIVATE src)
 

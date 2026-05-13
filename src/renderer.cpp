@@ -1,4 +1,6 @@
 #include "renderer.h"
+#include "text.h"
+#include "atlas.h"
 #include <cstdio>
 #include <cstring>
 
@@ -96,7 +98,9 @@ Renderer create_renderer(VulkanDevice& vkdev, GPU& gpu, Pipeline& pipeline) {
     return r;
 }
 
-void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc, Pipeline& pipeline) {
+void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc,
+                  Pipeline& pipeline,
+                  TextPipeline& text, Atlas& atlas) {
     // 1. Wait for previous frame
     vkWaitForFences(vkdev.device, 1, &r.in_flight, VK_TRUE, UINT64_MAX);
 
@@ -191,6 +195,10 @@ void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc, Pipeline& pip
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(r.command_buffer, 0, 1, buffers, offsets);
     vkCmdDraw(r.command_buffer, 6, 1, 0, 0);  // 6 vertices = 1 quad
+        // NEW: draw text on top of the teal square
+    render_text(r.command_buffer, text, atlas,
+                sc.extent.width, sc.extent.height,
+                4.0f);  // pxrange we baked with
 
     vkCmdEndRendering(r.command_buffer);
 

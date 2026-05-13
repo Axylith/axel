@@ -1,5 +1,6 @@
 #pragma once
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <X11/extensions/sync.h>
 
 struct AppWindow
@@ -14,6 +15,9 @@ struct AppWindow
     XSyncCounter sync_counter;
     XSyncValue sync_value;
     bool sync_pending;
+
+    XIM xim = nullptr;
+    XIC xic = nullptr;
 
     int width;
     int height;
