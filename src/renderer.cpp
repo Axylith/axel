@@ -55,14 +55,14 @@ Renderer create_renderer(VulkanDevice& vkdev, GPU& gpu, Pipeline& pipeline) {
     float vertices[] = {
         // Triangle 1 (top-left half)
         // x      y      r     g     b     a
-        -0.5f, -0.5f,  0.07f, 0.47f, 0.49f, 1.0f,  // top-left     (Tol teal #00767B)
-         0.5f, -0.5f,  0.07f, 0.47f, 0.49f, 1.0f,  // top-right
-        -0.5f,  0.5f,  0.07f, 0.47f, 0.49f, 1.0f,  // bottom-left
+        -0.8f, -1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // top-left     (Tol teal #00767B)
+         1.0f, -1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // top-right
+        -0.8f,  1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // bottom-left
 
         // Triangle 2 (bottom-right half)
-         0.5f, -0.5f,  0.07f, 0.47f, 0.49f, 1.0f,  // top-right
-         0.5f,  0.5f,  0.07f, 0.47f, 0.49f, 1.0f,  // bottom-right
-        -0.5f,  0.5f,  0.07f, 0.47f, 0.49f, 1.0f,  // bottom-left
+         1.0f, -1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // top-right
+         1.0f,  1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // bottom-right
+        -0.8f,  1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // bottom-left
     };
 
     VkBufferCreateInfo buffer_info{};

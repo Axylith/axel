@@ -274,42 +274,6 @@ TextPipeline create_text_pipeline(VkDevice device,
 }
 
 
-bool append_cursor_quad(TextPipeline& tp,
-                        const AxylFont& font,
-                        float r, float g, float b, float a) {
-    if (!tp.vertex_mapped || tp.glyph_count >= tp.max_glyphs) return false;
-
-    const Glyph* solid = font_get_glyph(font, 'M');
-    if (!solid) return false;
-
-    float atlas_w = (float)font.atlas_width;
-    float atlas_h = (float)font.atlas_height;
-
-    // Center of M's atlas region — deep interior, MTSDF reads > 0.5 → opaque.
-    float ucx = 0.5f * (solid->atlas_left + solid->atlas_right) / atlas_w;
-    float vcy = 1.0f - 0.5f * (solid->atlas_top + solid->atlas_bottom) / atlas_h;
-
-    float ps     = tp.pixel_size;
-    float top    = tp.baseline_y - font.ascender  * ps;
-    float bottom = tp.baseline_y - font.descender * ps;   // descender is negative
-    float x0     = tp.pen_x;
-    float x1     = x0 + 2.0f;                              // 2px wide
-
-    TextVertex* verts = (TextVertex*)tp.vertex_mapped;
-    TextVertex* v     = &verts[tp.glyph_count * 6];
-
-    auto set = [&](TextVertex& tv, float x, float y) {
-        tv.pos[0] = x;   tv.pos[1] = y;
-        tv.uv[0]  = ucx; tv.uv[1]  = vcy;
-        tv.color[0] = r; tv.color[1] = g; tv.color[2] = b; tv.color[3] = a;
-    };
-    set(v[0], x0, top);    set(v[1], x1, top);    set(v[2], x0, bottom);
-    set(v[3], x1, top);    set(v[4], x1, bottom); set(v[5], x0, bottom);
-
-    tp.glyph_count++;
-    return true;
-}
-
 void render_text(VkCommandBuffer cmd,
                  TextPipeline& tp,
                  Atlas& atlas,
@@ -472,4 +436,135 @@ uint32_t build_text_vertices (TextPipeline& tp,
     return append_text_run(tp, font, utf8_text,
                            origin_x_px, origin_y_px, pixel_size,
                            r, g, b, a);
+}
+
+
+// In text.cpp — new function. Existing append_text_run unchanged.
+
+uint32_t build_text_vertices_with_cursor(TextPipeline& tp,
+                                          const AxylFont& font,
+                                          const char* utf8_text,
+                                          size_t cursor_byte_offset,
+                                          float origin_x_px,
+                                          float origin_y_px,
+                                          float pixel_size,
+                                          float r, float g, float b, float a) {
+    tp.glyph_count = 0;
+    if (!tp.vertex_mapped) return 0;
+
+    TextVertex* verts = (TextVertex*)tp.vertex_mapped;
+    uint32_t    glyph_index = 0;
+
+    float cursor_x    = origin_x_px;
+    float baseline_y  = origin_y_px;
+    float line_height = (font.ascender - font.descender) * pixel_size * 1.2f;
+
+    float atlas_w = (float)font.atlas_width;
+    float atlas_h = (float)font.atlas_height;
+
+    // Initialize cursor position to origin (in case the buffer is empty
+    // or cursor is at offset 0).
+    tp.cursor_pen_x      = cursor_x;
+    tp.cursor_baseline_y = baseline_y;
+    bool cursor_recorded = false;
+
+    size_t byte_offset = 0;
+    for (const char* p = utf8_text; *p; p++, byte_offset++) {
+        // Snapshot pen state when we reach the cursor's byte offset.
+        if (!cursor_recorded && byte_offset == cursor_byte_offset) {
+            tp.cursor_pen_x      = cursor_x;
+            tp.cursor_baseline_y = baseline_y;
+            cursor_recorded = true;
+        }
+
+        uint32_t codepoint = (uint8_t)*p;
+
+        if (codepoint == '\n') {
+            baseline_y += line_height;
+            cursor_x    = origin_x_px;
+            continue;
+        }
+
+        const Glyph* g_meta = font_get_glyph(font, codepoint);
+        if (!g_meta) continue;
+
+        bool has_quad = (g_meta->plane_right > g_meta->plane_left) &&
+                        (g_meta->plane_top   > g_meta->plane_bottom);
+
+        if (has_quad && glyph_index < tp.max_glyphs) {
+            float x0 = cursor_x   + g_meta->plane_left   * pixel_size;
+            float x1 = cursor_x   + g_meta->plane_right  * pixel_size;
+            float y0 = baseline_y - g_meta->plane_top    * pixel_size;
+            float y1 = baseline_y - g_meta->plane_bottom * pixel_size;
+
+            float u0 = g_meta->atlas_left  / atlas_w;
+            float u1 = g_meta->atlas_right / atlas_w;
+            float v0 = 1.0f - g_meta->atlas_top    / atlas_h;
+            float v1 = 1.0f - g_meta->atlas_bottom / atlas_h;
+
+            TextVertex* v = &verts[glyph_index * 6];
+            v[0].pos[0]=x0; v[0].pos[1]=y0; v[0].uv[0]=u0; v[0].uv[1]=v0;
+            v[1].pos[0]=x1; v[1].pos[1]=y0; v[1].uv[0]=u1; v[1].uv[1]=v0;
+            v[2].pos[0]=x0; v[2].pos[1]=y1; v[2].uv[0]=u0; v[2].uv[1]=v1;
+            v[3].pos[0]=x1; v[3].pos[1]=y0; v[3].uv[0]=u1; v[3].uv[1]=v0;
+            v[4].pos[0]=x1; v[4].pos[1]=y1; v[4].uv[0]=u1; v[4].uv[1]=v1;
+            v[5].pos[0]=x0; v[5].pos[1]=y1; v[5].uv[0]=u0; v[5].uv[1]=v1;
+
+            for (int i = 0; i < 6; i++) {
+                v[i].color[0] = r; v[i].color[1] = g;
+                v[i].color[2] = b; v[i].color[3] = a;
+            }
+
+            glyph_index++;
+        }
+
+        cursor_x += g_meta->advance * pixel_size;
+    }
+
+    // Cursor at end of buffer.
+    if (!cursor_recorded) {
+        tp.cursor_pen_x      = cursor_x;
+        tp.cursor_baseline_y = baseline_y;
+    }
+
+    tp.pen_x       = cursor_x;
+    tp.baseline_y  = baseline_y;
+    tp.pixel_size  = pixel_size;
+    tp.glyph_count = glyph_index;
+    return glyph_index;
+}
+
+bool append_cursor_quad(TextPipeline& tp,
+                        const AxylFont& font,
+                        float r, float g, float b, float a) {
+    if (!tp.vertex_mapped || tp.glyph_count >= tp.max_glyphs) return false;
+
+    const Glyph* solid = font_get_glyph(font, 'M');
+    if (!solid) return false;
+
+    float atlas_w = (float)font.atlas_width;
+    float atlas_h = (float)font.atlas_height;
+
+    float ucx = 0.5f * (solid->atlas_left + solid->atlas_right) / atlas_w;
+    float vcy = 1.0f - 0.5f * (solid->atlas_top + solid->atlas_bottom) / atlas_h;
+
+    float ps     = tp.pixel_size;
+    float top    = tp.cursor_baseline_y - font.ascender  * ps;
+    float bottom = tp.cursor_baseline_y - font.descender * ps;
+    float x0     = tp.cursor_pen_x;
+    float x1     = x0 + 2.0f;
+
+    TextVertex* verts = (TextVertex*)tp.vertex_mapped;
+    TextVertex* v     = &verts[tp.glyph_count * 6];
+
+    auto set = [&](TextVertex& tv, float x, float y) {
+        tv.pos[0] = x;   tv.pos[1] = y;
+        tv.uv[0]  = ucx; tv.uv[1]  = vcy;
+        tv.color[0] = r; tv.color[1] = g; tv.color[2] = b; tv.color[3] = a;
+    };
+    set(v[0], x0, top);    set(v[1], x1, top);    set(v[2], x0, bottom);
+    set(v[3], x1, top);    set(v[4], x1, bottom); set(v[5], x0, bottom);
+
+    tp.glyph_count++;
+    return true;
 }

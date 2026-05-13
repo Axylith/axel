@@ -16,32 +16,6 @@ void editor_ensure_data_dir(const Editor& e) {
     mkdir(dir.c_str(), 0755);   // ignore EEXIST
 }
 
-void editor_insert_utf8(Editor& e, const char* bytes, int n){
-    if (n <= 0) return;
-    if (n == 1) {
-        unsigned char c = (unsigned char)bytes[0];
-        if(c < 0x20 && c != '\t') return;
-        if (c == 0x7F) return;
-    }
-
-    e.last_input = std::chrono::steady_clock::now();
-    e.measure_pending = true;
-    e.text.append(bytes, (size_t)n);
-    e.dirty = true;
-    e.modified = true;
-};
-
-void editor_backspace(Editor& e) {
-    if (e.text.empty()) return;
-    e.last_input      = std::chrono::steady_clock::now();
-    e.measure_pending = true;
-    size_t i = e.text.size();
-    do { i--; } while (i > 0 && ((unsigned char)e.text[i] & 0xC0) == 0x80);
-    e.text.erase(i);
-    e.dirty    = true;
-    e.modified = true;
-}
-
 void editor_set_status(Editor& e, const char* msg){
     e.status = msg;
     e.status_set = std::chrono::steady_clock::now();
@@ -54,7 +28,128 @@ const char* editor_get_status(const Editor& e, double max_age_seconds){
     if(age > max_age_seconds) return nullptr;
     return e.status.c_str();
 }
+void editor_insert_utf8(Editor& e, const char* bytes, int n){
+    if (n <= 0) return;
+    if (n == 1) {
+        unsigned char c = (unsigned char)bytes[0];
+        if (c < 0x20 && c != '\t' && c != '\n') return;   // <-- allow newline
+        if (c == 0x7F) return;
+    }
 
+    e.last_input = std::chrono::steady_clock::now();
+    e.measure_pending = true;
+    e.text.insert(e.cursor, bytes, (size_t)n);
+    e.cursor += (size_t)n;
+    e.dirty = true;
+    e.modified = true;
+};
+
+
+
+static size_t utf8_prev(const std::string& s, size_t pos){
+    if (pos == 0) return 0;
+    do {pos--;} while (pos > 0 && ((unsigned char)s[pos] & 0xC0) == 0x80);
+    return pos;
+    
+}
+
+static size_t utf8_next(const std::string& s, size_t pos){
+    if(pos >= s.size()) return s.size();
+    pos++;
+    while(pos < s.size() && ((unsigned char)s[pos] & 0xC0) == 0x80) pos++;
+    return pos;
+}
+
+
+static size_t line_start(const std::string& s, size_t pos) {
+    while (pos > 0 && s[pos - 1] != '\n') pos--;
+    return pos;
+}
+
+static size_t line_end(const std::string& s, size_t pos) {
+    while (pos < s.size() && s[pos] != '\n') pos++;
+    return pos;
+}
+
+// --- Mutations now operate at cursor ---
+
+
+
+void editor_backspace(Editor& e) {
+    if (e.cursor > e.text.size()) e.cursor = e.text.size();
+
+    if (e.cursor == 0) return;
+    e.last_input      = std::chrono::steady_clock::now();
+    e.measure_pending = true;
+    size_t prev = utf8_prev(e.text, e.cursor);
+    e.text.erase(prev, e.cursor - prev);
+    e.cursor = prev;
+    e.dirty    = true;
+    e.modified = true;
+}
+
+void editor_newline(Editor& e) {
+    editor_insert_utf8(e, "\n", 1);
+}
+
+// --- Cursor movement (no buffer change, only cursor + dirty) ---
+
+void editor_move_left(Editor& e) {
+    if (e.cursor > e.text.size()) e.cursor = e.text.size();
+
+    if (e.cursor == 0) return;
+    e.cursor = utf8_prev(e.text, e.cursor);
+    e.dirty = true;
+}
+
+void editor_move_right(Editor& e) {
+    if (e.cursor > e.text.size()) e.cursor = e.text.size();
+
+    if (e.cursor >= e.text.size()) return;
+    e.cursor = utf8_next(e.text, e.cursor);
+    e.dirty = true;
+}
+
+void editor_move_home(Editor& e) {
+    if (e.cursor > e.text.size()) e.cursor = e.text.size();
+
+    size_t ls = line_start(e.text, e.cursor);
+    if (e.cursor != ls) { e.cursor = ls; e.dirty = true; }
+}
+
+void editor_move_end(Editor& e) {
+    if (e.cursor > e.text.size()) e.cursor = e.text.size();
+
+    size_t le = line_end(e.text, e.cursor);
+    if (e.cursor != le) { e.cursor = le; e.dirty = true; }
+}
+
+void editor_move_up(Editor& e) {
+    if (e.cursor > e.text.size()) e.cursor = e.text.size();
+
+    size_t ls  = line_start(e.text, e.cursor);
+    if (ls == 0) return;                         // already on first line
+    size_t col = e.cursor - ls;                  // byte column on current line
+    size_t prev_end   = ls - 1;                  // points at the \n separating lines
+    size_t prev_start = line_start(e.text, prev_end);
+    size_t prev_len   = prev_end - prev_start;
+    e.cursor = prev_start + (col < prev_len ? col : prev_len);
+    e.dirty = true;
+}
+
+void editor_move_down(Editor& e) {
+    if (e.cursor > e.text.size()) e.cursor = e.text.size();
+
+    size_t le = line_end(e.text, e.cursor);
+    if (le == e.text.size()) return;             // already on last line
+    size_t ls   = line_start(e.text, e.cursor);
+    size_t col  = e.cursor - ls;
+    size_t next_start = le + 1;                  // skip the \n
+    size_t next_end   = line_end(e.text, next_start);
+    size_t next_len   = next_end - next_start;
+    e.cursor = next_start + (col < next_len ? col : next_len);
+    e.dirty = true;
+}
 
 bool editor_save(Editor &e){
     if(e.path.empty()){
@@ -168,15 +263,7 @@ bool editor_load(Editor& e) {
     snprintf(buf, sizeof(buf), "loaded %s (%zu bytes%s)",
              e.path.c_str(), e.text.size(),
              has_header ? ", .axl" : ", plain text");
+    e.cursor = 0;
     editor_set_status(e, buf);
     return true;
-}
-
-
-void editor_newline(Editor& e) {
-    e.last_input      = std::chrono::steady_clock::now();
-    e.measure_pending = true;
-    e.text.push_back('\n');
-    e.dirty    = true;
-    e.modified = true;
 }
