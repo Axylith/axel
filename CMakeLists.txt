@@ -22,6 +22,7 @@ add_executable(axylith
     src/atlas.cpp
     src/text.cpp
     src/editor.cpp
+    src/solid.cpp
 
 
 )
@@ -56,11 +57,29 @@ if(GLSLC)
                 -o ${CMAKE_BINARY_DIR}/shaders/text.frag.spv
         DEPENDS ${CMAKE_SOURCE_DIR}/shaders/text.frag
     )
+
+
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/shaders/solid.frag.spv
+        COMMAND ${GLSLC} ${CMAKE_SOURCE_DIR}/shaders/solid.frag
+                -o ${CMAKE_BINARY_DIR}/shaders/solid.frag.spv
+        DEPENDS ${CMAKE_SOURCE_DIR}/shaders/solid.frag
+    )
+
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/shaders/solid.vert.spv
+        COMMAND ${GLSLC} ${CMAKE_SOURCE_DIR}/shaders/solid.vert
+                -o ${CMAKE_BINARY_DIR}/shaders/solid.vert.spv
+        DEPENDS ${CMAKE_SOURCE_DIR}/shaders/solid.vert
+    )
+
     add_custom_target(shaders ALL DEPENDS
         ${CMAKE_BINARY_DIR}/shaders/quad.vert.spv
         ${CMAKE_BINARY_DIR}/shaders/quad.frag.spv
         ${CMAKE_BINARY_DIR}/shaders/text.vert.spv
         ${CMAKE_BINARY_DIR}/shaders/text.frag.spv
+        ${CMAKE_BINARY_DIR}/shaders/solid.vert.spv
+        ${CMAKE_BINARY_DIR}/shaders/solid.frag.spv
     )
     add_custom_command(TARGET axylith POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
