@@ -6,6 +6,9 @@
 #include "pipeline.h"
 #include "text.h"
 #include "atlas.h"
+#include "solid.h"
+#include "font.h"
+#include "editor.h"
 
 struct Renderer {
     VkCommandPool command_pool;
@@ -19,6 +22,10 @@ struct Renderer {
 };
 
 Renderer create_renderer(VulkanDevice& vkdev, GPU& gpu, Pipeline& pipeline);
+
 void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc,
                   Pipeline& pipeline,
-                  TextPipeline& text, Atlas& atlas);
+                  TextPipeline& text, Atlas& atlas,
+                  SolidPipeline& solid, const AxylFont& font,
+                  Editor& editor,
+                  float text_origin_x, float text_origin_y);

@@ -22,6 +22,7 @@ static uint32_t find_memory_type(VkPhysicalDevice physical, uint32_t type_filter
 
 Renderer create_renderer(VulkanDevice& vkdev, GPU& gpu, Pipeline& pipeline) {
     Renderer r{};
+    float r1 = 0.102f; float g1 = 0.094f; float b1 = 0.086f; float a1 = 1.0f;
 
     // Command pool
     VkCommandPoolCreateInfo pool_info{};
@@ -55,14 +56,14 @@ Renderer create_renderer(VulkanDevice& vkdev, GPU& gpu, Pipeline& pipeline) {
     float vertices[] = {
         // Triangle 1 (top-left half)
         // x      y      r     g     b     a
-        -0.8f, -1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // top-left     (Tol teal #00767B)
-         1.0f, -1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // top-right
-        -0.8f,  1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // bottom-left
+        -0.8f, -1.0f,  r1, g1, b1, a1,  // top-left     (Tol teal #00767B)
+         1.0f, -1.0f,  r1, g1, b1, a1,  // top-right
+        -0.8f,  1.0f,  r1, g1, b1, a1,  // bottom-left
 
         // Triangle 2 (bottom-right half)
-         1.0f, -1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // top-right
-         1.0f,  1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // bottom-right
-        -0.8f,  1.0f,  0.07f, 0.47f, 0.49f, 1.0f,  // bottom-left
+         1.0f, -1.0f,  r1, g1, b1, a1,  // top-right
+         1.0f,  1.0f,  r1, g1, b1, a1,  // bottom-right
+        -0.8f,  1.0f,  r1, g1, b1, a1,  // bottom-left
     };
 
     VkBufferCreateInfo buffer_info{};
@@ -100,7 +101,10 @@ Renderer create_renderer(VulkanDevice& vkdev, GPU& gpu, Pipeline& pipeline) {
 
 void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc,
                   Pipeline& pipeline,
-                  TextPipeline& text, Atlas& atlas) {
+                  TextPipeline& text, Atlas& atlas,
+                  SolidPipeline& solid, const AxylFont& font,
+                  Editor& editor,
+                  float text_origin_x, float text_origin_y) {
     // 1. Wait for previous frame
     vkWaitForFences(vkdev.device, 1, &r.in_flight, VK_TRUE, UINT64_MAX);
 
@@ -161,7 +165,7 @@ void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc,
     color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    color_attachment.clearValue.color = {{0.05f, 0.05f, 0.07f, 1.0f}};
+    color_attachment.clearValue.color = {{0.055f, 0.051f, 0.047f, 1.0f}};
 
     VkRenderingInfo rendering_info{};
     rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -195,6 +199,26 @@ void render_frame(Renderer& r, VulkanDevice& vkdev, Swapchain& sc,
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(r.command_buffer, 0, 1, buffers, offsets);
     vkCmdDraw(r.command_buffer, 6, 1, 0, 0);  // 6 vertices = 1 quad
+
+    // --- Solid pass: selection highlights, behind the text ---
+    solid_begin(solid);
+    if (editor.has_selection) {
+        size_t sel_lo, sel_hi;
+        editor_selection_range(editor, sel_lo, sel_hi);
+        fprintf(stderr, "[sel] lo=%zu hi=%zu origin=(%.1f,%.1f)\n",
+        sel_lo, sel_hi, text_origin_x, text_origin_y);
+        emit_selection_rects(solid, font, editor.text.c_str(),
+                     sel_lo, sel_hi,
+                     text_origin_x,
+                     text_origin_y,
+                     18.0f,
+                     0.66f, 0.69f, 0.71f, 0.30f);
+    }
+    render_solid(r.command_buffer, solid, sc.extent.width, sc.extent.height);
+
+
+
+
         // NEW: draw text on top of the teal square
     render_text(r.command_buffer, text, atlas,
                 sc.extent.width, sc.extent.height,
