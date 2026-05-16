@@ -4,6 +4,7 @@
 #include "vulkan_init.h"
 #include "atlas.h"
 #include "font.h"
+#include "solid.h"
 
 // One vertex in a text quad. 8 floats per vertex = 32 bytes.
 //   pos:   screen-space pixel coordinates
@@ -99,3 +100,13 @@ uint32_t build_text_vertices_with_cursor(TextPipeline& tp,
 bool append_cursor_quad(TextPipeline& tp,
                         const AxylFont& font,
                         float r, float g, float b, float a);
+
+uint32_t emit_selection_rects(SolidPipeline& sp,
+                              const AxylFont& font,
+                              const char* utf8_text,
+                              size_t sel_lo,
+                              size_t sel_hi,
+                              float origin_x_px,
+                              float origin_y_px,
+                              float pixel_size,
+                              float r, float g, float b, float a);

@@ -151,6 +151,123 @@ void editor_move_down(Editor& e) {
     e.dirty = true;
 }
 
+void editor_clear_selection(Editor& e) {
+    if (e.has_selection) {
+        e.has_selection = false;
+        e.dirty = true;
+    }
+}
+
+void editor_select_to(Editor& e, size_t new_cursor) {
+    e.sel_active = new_cursor;
+    e.has_selection = (e.sel_anchor != e.sel_active);
+    e.dirty = true;
+}
+
+void editor_selection_range(const Editor& e, size_t& lo, size_t& hi) {
+    if (e.sel_anchor <= e.sel_active) {
+        lo = e.sel_anchor;
+        hi = e.sel_active;
+    } else {
+        lo = e.sel_active;
+        hi = e.sel_anchor;
+    }
+}
+
+void editor_delete_selection(Editor& e) {
+    if (!e.has_selection) return;
+    size_t lo, hi;
+    editor_selection_range(e, lo, hi);
+    if (hi > e.text.size()) hi = e.text.size();
+    if (lo >= hi) {
+        e.has_selection = false;
+        return;
+    }
+    e.last_input = std::chrono::steady_clock::now();
+    e.measure_pending = true;
+    e.text.erase(lo, hi - lo);
+    e.cursor = lo;
+    e.has_selection = false;
+    e.dirty = true;
+    e.modified = true;
+}
+
+
+
+
+static size_t line_index_of_cursor(const std::string& s, size_t cursor){
+    size_t lines = 0;
+    if (cursor > s.size()) cursor = s.size();
+    for (size_t i = 0; i < cursor; i++){
+        if(s[i] == '\n') lines++;
+    }
+    return lines;
+}
+
+void editor_scroll_to_cursor(Editor& e,
+                              float viewport_top_px,
+                              float viewport_height_px,
+                              float line_height_px) {
+    if (line_height_px <= 0.0f) return;
+
+    size_t cursor_line = line_index_of_cursor(e.text, e.cursor);
+    float cursor_y = (float)(cursor_line + 1) * line_height_px;
+
+    // Keep one line of margin so the cursor doesn't sit flush against the edge.
+    float margin = line_height_px;
+
+    float cursor_screen_y = cursor_y - e.scroll_y;
+    if (cursor_screen_y < margin) {
+        e.scroll_y = cursor_y - margin;
+        e.dirty = true;
+    } else if (cursor_screen_y > viewport_height_px - margin) {
+        e.scroll_y = cursor_y - (viewport_height_px - margin);
+        e.dirty = true;
+    }
+
+    if (e.scroll_y < 0.0f) {
+        e.scroll_y = 0.0f;
+    }
+    (void)viewport_top_px;  // reserved for future per-panel viewports
+}
+
+void editor_scroll_lines(Editor& e, int n_lines, float line_height_px,
+                         float viewport_top_px, float viewport_height_px,
+                         float text_total_height_px) {
+    (void)viewport_top_px;
+    (void)viewport_height_px;
+    if (line_height_px <= 0.0f || n_lines == 0) return;
+
+    e.scroll_y += (float)n_lines * line_height_px;
+
+    float max_scroll = text_total_height_px - line_height_px;
+    if (max_scroll < 0.0f) max_scroll = 0.0f;
+    if (e.scroll_y < 0.0f)        e.scroll_y = 0.0f;
+    if (e.scroll_y > max_scroll)  e.scroll_y = max_scroll;
+    e.dirty = true;
+}
+
+
+void editor_page_up(Editor& e, float viewport_height_px, float line_height_px) {
+    if (line_height_px <= 0.0f) return;
+    int lines_per_page = (int)(viewport_height_px / line_height_px);
+    if (lines_per_page < 1) lines_per_page = 1;
+    for (int i = 0; i < lines_per_page; i++) {
+        editor_move_up(e);
+    }
+}
+
+void editor_page_down(Editor& e, float viewport_height_px, float line_height_px) {
+    if (line_height_px <= 0.0f) return;
+    int lines_per_page = (int)(viewport_height_px / line_height_px);
+    if (lines_per_page < 1) lines_per_page = 1;
+    for (int i = 0; i < lines_per_page; i++) {
+        editor_move_down(e);
+    }
+}
+
+
+
 bool editor_save(Editor &e){
     if(e.path.empty()){
         editor_set_status(e, "save failed: no path");
