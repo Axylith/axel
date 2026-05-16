@@ -212,14 +212,48 @@ int main(int argc, char** argv){
                     if (status == XLookupKeySym || status == XLookupBoth) {
                         // Ctrl-modified shortcuts first
                         if (ctrl) {
+                            bool shift = (ev.xkey.state & ShiftMask) != 0;
                             switch (keysym) {
-                                case XK_s: case XK_S:
-                                    editor_save(editor); handled = true; break;
-                                case XK_o: case XK_O:
-                                    editor_load(editor); handled = true; break;
+                                case XK_s: case XK_S: editor_save(editor); handled = true; break;
+                                case XK_o: case XK_O: editor_load(editor); handled = true; break;
+                            
+                                case XK_Left:
+                                    if (shift) {
+                                        if (!editor.has_selection) editor.sel_anchor = editor.cursor;
+                                        editor_move_word_left(editor);
+                                        editor_select_to(editor, editor.cursor);
+                                    } else {
+                                        editor_clear_selection(editor);
+                                        editor_move_word_left(editor);
+                                    }
+                                    editor_scroll_to_cursor(editor, viewport_top_px, viewport_height_px, line_height);
+                                    handled = true; break;
+                                
+                                case XK_Right:
+                                    if (shift) {
+                                        if (!editor.has_selection) editor.sel_anchor = editor.cursor;
+                                        editor_move_word_right(editor);
+                                        editor_select_to(editor, editor.cursor);
+                                    } else {
+                                        editor_clear_selection(editor);
+                                        editor_move_word_right(editor);
+                                    }
+                                    editor_scroll_to_cursor(editor, viewport_top_px, viewport_height_px, line_height);
+                                    handled = true; break;
+                                
+                                case XK_BackSpace:
+                                    if (editor.has_selection) {
+                                        editor_delete_selection(editor);
+                                    } else {
+                                        editor_delete_word_left(editor);
+                                    }
+                                    editor_scroll_to_cursor(editor, viewport_top_px, viewport_height_px, line_height);
+                                    handled = true; break;
+                                
                                 default: break;
                             }
                         }
+
                         if (!handled) {
                             switch (keysym) {
                                 case XK_Escape:    app.running = false;                       handled = true; break;

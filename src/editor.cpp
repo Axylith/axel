@@ -151,6 +151,80 @@ void editor_move_down(Editor& e) {
     e.dirty = true;
 }
 
+static int char_class(unsigned char c) {
+    if (c == ' ' || c == '\t' || c == '\n' || c == '\r') return 0;
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9') || c == '_' || c >= 0x80) return 1;
+    return 2;
+}
+
+static size_t word_right(const std::string& s, size_t pos){
+    size_t n = s.size();
+    if (pos >= n) return n;
+
+    while (pos < n && char_class((unsigned char)s[pos]) == 0) pos = utf8_next(s, pos);
+    if (pos >= n) return n;
+
+    int cls = char_class((unsigned char)s[pos]);
+    while (pos < n && char_class((unsigned char)s[pos]) == cls)
+        pos = utf8_next(s, pos);
+ 
+    return pos;
+}
+
+static size_t word_left(const std::string& s, size_t pos) {
+    if (pos == 0) return 0;
+ 
+    // Step back over whitespace.
+    size_t p = utf8_prev(s, pos);
+    while (p > 0 && char_class((unsigned char)s[p]) == 0)
+        p = utf8_prev(s, p);
+ 
+    // If we're at the start, done.
+    if (p == 0 && char_class((unsigned char)s[p]) == 0) return 0;
+ 
+    // Skip the run of this class going left. Stop at the first char of it.
+    int cls = char_class((unsigned char)s[p]);
+    while (p > 0) {
+        size_t prev = utf8_prev(s, p);
+        if (char_class((unsigned char)s[prev]) != cls) break;
+        p = prev;
+    }
+    return p;
+}
+
+
+void editor_move_word_left(Editor& e){
+    if (e.cursor > e.text.size()) e.cursor = e.text.size();
+    if (e.cursor == 0) return;
+
+    e.cursor = word_left(e.text, e.cursor);
+    e.dirty = true;
+}
+
+void editor_move_word_right(Editor& e){
+    if (e.cursor > e.text.size()) e.cursor = e.text.size();
+    if (e.cursor >= e.text.size()) return;
+
+    e.cursor = word_right(e.text, e.cursor);
+    e.dirty = true;
+}
+
+void editor_delete_word_left(Editor& e){
+    if (e.cursor > e.text.size()) e.cursor = e.text.size();
+    if (e.cursor == 0) return;
+    size_t target = word_left(e.text, e.cursor);
+    if(target >= e.cursor) return;
+    e.last_input = std::chrono::steady_clock::now();
+    e.measure_pending = true;
+    e.text.erase(target, e.cursor - target);
+    e.cursor = target;
+    e.dirty = true;
+    e.modified = true;
+}
+
+
+
 void editor_clear_selection(Editor& e) {
     if (e.has_selection) {
         e.has_selection = false;
@@ -384,3 +458,4 @@ bool editor_load(Editor& e) {
     editor_set_status(e, buf);
     return true;
 }
+

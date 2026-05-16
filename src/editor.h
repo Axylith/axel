@@ -60,3 +60,8 @@ void editor_selection_range(const Editor& e, size_t& lo, size_t& hi);
 void editor_clear_selection(Editor& e);
 void editor_select_to(Editor& e, size_t new_cursor);
 void editor_delete_selection(Editor& e);
+
+void editor_move_word_left(Editor& e);
+void editor_move_word_right(Editor& e);
+
+void editor_delete_word_left(Editor& e);
