@@ -1,0 +1,162 @@
+name: Build
+
+# One workflow for all compile/test/sanitizer checks.
+# Replaces the old ci.yml + build-matrix.yml + sanitizers.yml + _setup.yml.
+#
+# Matrix structure:
+#   - Standard builds: {gcc-12, gcc-13, clang-17} x {Debug, Release, RelWithDebInfo}
+#   - Sanitizer builds: {asan, ubsan, tsan} on Debug with clang-17
+#
+# Doc-only changes are skipped via paths-ignore so a README edit doesn't
+# trigger 12 compile jobs.
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+      - '**.mdx'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'changelog.md'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - '**.mdx'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'changelog.md'
+
+# Cancel superseded runs on the same ref — no point finishing CI for a
+# commit that's already been pushed past.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ----- Standard build + test matrix -----
+  build:
+    name: ${{ matrix.compiler }} / ${{ matrix.build_type }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc-12, gcc-13, clang-17]
+        build_type: [Debug, Release, RelWithDebInfo]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-v1
+          restore-keys: apt-${{ runner.os }}-
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: |
+          # Azure's Ubuntu mirror intermittently hangs for 30+ minutes.
+          # Swap to Canonical's archive and cap retries so we fail fast.
+          sudo sed -i 's|http://azure\.archive\.ubuntu\.com|http://archive.ubuntu.com|g' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+          sudo apt-get update -o Acquire::Retries=2 -o Acquire::http::Timeout=15
+          sudo apt-get install -y --no-install-recommends \
+            ${{ matrix.compiler }} cmake ninja-build \
+            libvulkan-dev vulkan-validationlayers \
+            libx11-dev libxext-dev \
+            libwayland-dev wayland-protocols \
+            glslc
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.compiler }}-${{ matrix.build_type }}
+          max-size: 200M
+
+      - name: Resolve compiler binaries
+        run: |
+          CC_BIN="${{ matrix.compiler }}"
+          CXX_BIN=$(echo "${{ matrix.compiler }}" | sed 's/gcc/g++/;s/clang/clang++/')
+          echo "CC=$CC_BIN"   >> $GITHUB_ENV
+          echo "CXX=$CXX_BIN" >> $GITHUB_ENV
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER=$CC \
+            -DCMAKE_CXX_COMPILER=$CXX \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+
+  # ----- Sanitizer builds (clang-17, Debug) -----
+  sanitizers:
+    name: ${{ matrix.san }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - san: asan
+            flags: "-fsanitize=address -fno-omit-frame-pointer -g"
+          - san: ubsan
+            flags: "-fsanitize=undefined -fno-omit-frame-pointer -g"
+          - san: tsan
+            flags: "-fsanitize=thread -fno-omit-frame-pointer -g"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-v1
+          restore-keys: apt-${{ runner.os }}-
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: |
+          sudo sed -i 's|http://azure\.archive\.ubuntu\.com|http://archive.ubuntu.com|g' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+          sudo apt-get update -o Acquire::Retries=2 -o Acquire::http::Timeout=15
+          sudo apt-get install -y --no-install-recommends \
+            clang-17 cmake ninja-build \
+            libvulkan-dev vulkan-validationlayers \
+            libx11-dev libxext-dev \
+            libwayland-dev wayland-protocols \
+            glslc
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: san-${{ matrix.san }}
+          max-size: 200M
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang-17 \
+            -DCMAKE_CXX_COMPILER=clang++-17 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_FLAGS="${{ matrix.flags }}" \
+            -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.flags }}"
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure

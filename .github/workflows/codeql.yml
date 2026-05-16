@@ -1,12 +1,20 @@
 name: CodeQL
 
+# CodeQL is the slowest check (~5-8 min) and code's security posture
+# doesn't change on every push. Run it on PRs into protected branches
+# and once a week -- not on every direct push or doc commit.
+
 on:
-  push:
-    branches: [main, master, development]
   pull_request:
     branches: [main, master, development]
+    paths-ignore:
+      - '**.md'
+      - '**.mdx'
+      - 'docs/**'
+      - 'LICENSE'
   schedule:
     - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 jobs:
   analyze:
@@ -31,10 +39,20 @@ jobs:
           languages: ${{ matrix.language }}
           queries: security-and-quality
 
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-v1
+          restore-keys: apt-${{ runner.os }}-
+
       - name: Install build dependencies
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo sed -i 's|http://azure\.archive\.ubuntu\.com|http://archive.ubuntu.com|g' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+          sudo apt-get update -o Acquire::Retries=2 -o Acquire::http::Timeout=15
+          sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build \
             libvulkan-dev libx11-dev libxext-dev \
             libwayland-dev wayland-protocols \

@@ -27,9 +27,10 @@ static int x_io_error_handler(Display*) {
     return 0;  // never reached
 }
 
-static void render_and_sync(VulkanState& vk, AppWindow& app) {
+static void render_and_sync(VulkanState& vk, AppWindow& app, const AxylFont& font,
+                            Editor& editor, float ox, float oy) {
     render_frame(vk.renderer, vk.vkdev, vk.swapchain, vk.pipeline,
-                 vk.text, vk.atlas);    // ← add these
+                 vk.text, vk.atlas, vk.solid, font, editor, ox, oy);
     if (app.sync_pending) {
         vkDeviceWaitIdle(vk.vkdev.device);
         XSyncSetCounter(app.display, app.sync_counter, app.sync_value);
@@ -51,6 +52,7 @@ int main(int argc, char** argv){
     Timer   frame_timer;
     float offset_x = 0.25; //0 = right border
     float offset_y = 0.20; //0 = top border
+    
     if (argc > 1) {
         editor.path = argv[1];
         
@@ -61,7 +63,6 @@ int main(int argc, char** argv){
     constexpr double MONITOR_INTERVAL_MS = 1000.0;
     double last_resize_time_ms = 0.0;
     bool resize_pending = false;
-    constexpr double RESIZE_QUIET_MS = 16.0;
 
     AppWindow app = create_window(1280, 720);
     t.log("X11 window"); fflush(stdout);
@@ -110,6 +111,7 @@ int main(int argc, char** argv){
             vk.failed = true;
             return;
         }
+        
 
         // NEW: Create text pipeline
         vk.text = create_text_pipeline(vk.vkdev.device,
@@ -117,6 +119,11 @@ int main(int argc, char** argv){
                                        vk.atlas.set_layout,
                                        vk.gpu,
                                        1024);  // max 1024 glyphs
+
+        vk.solid = create_solid_pipeline(vk.vkdev.device,
+                                 vk.swapchain.format,
+                                 vk.gpu,
+                                 256);
         if (vk.text.handle == VK_NULL_HANDLE) {
             fprintf(stderr, "[text] Failed to create text pipeline\n");
             vk.failed = true;
@@ -168,8 +175,23 @@ int main(int argc, char** argv){
         fflush(stdout);
         goto cleanup;
     }
+    
 
     while (app.running){
+
+            // Per-frame viewport math — used by event handlers and the render block.
+        const float TEXT_PIXEL_SIZE = 18.0f;
+        const float line_height = (font.ascender - font.descender) * TEXT_PIXEL_SIZE * 1.2f;
+        const float viewport_top_px = ((float)((1 + (offset_y-1))/2)*app.height);
+        const float viewport_height_px = (float)app.height - viewport_top_px - 32.0f;
+        const float text_origin_x = ((float)((1 + (offset_x-1))/2)*app.width);
+        const float text_origin_y = ((float)((1 + (offset_y-1))/2)*app.height) - editor.scroll_y;
+        // Document height for scroll clamping.
+        size_t line_count = 1;
+        for (char c : editor.text) if (c == '\n') line_count++;
+        const float text_total_height_px = line_count * line_height;
+
+
         while (XPending(app.display)){
             XEvent ev;
             XNextEvent(app.display, &ev);
@@ -201,14 +223,50 @@ int main(int argc, char** argv){
                         if (!handled) {
                             switch (keysym) {
                                 case XK_Escape:    app.running = false;                       handled = true; break;
-                                case XK_BackSpace: editor_backspace(editor);                  handled = true; break;
-                                case XK_Return:    editor_newline(editor);                    handled = true; break;
+                                case XK_BackSpace: 
+                                    if (editor.has_selection) {
+                                        editor_delete_selection(editor);
+                                    } else {
+                                        editor_backspace(editor);
+                                    }
+                                    editor_scroll_to_cursor(editor, viewport_top_px, viewport_height_px, line_height);
+                                    handled = true; break;
+                                case XK_Return:        
+                                    if (editor.has_selection) editor_delete_selection(editor);
+                                    editor_newline(editor);
+                                    editor_scroll_to_cursor(editor, viewport_top_px, viewport_height_px, line_height);         
+                                    handled = true; break;
                                 case XK_Tab:       editor_insert_utf8(editor, "\t", 1);       handled = true; break;
                                 case XK_F1:        metrics.visible = !metrics.visible;        handled = true; break;
                                 
                                 // --- Cursor movement ---
-                                case XK_Left:      editor_move_left(editor);                  handled = true; break;
-                                case XK_Right:     editor_move_right(editor);                 handled = true; break;
+                                case XK_Left: {      
+                                    bool shift = (ev.xkey.state & ShiftMask) != 0;
+                                    if (shift) {
+                                        if(!editor.has_selection) editor.sel_anchor = editor.cursor;
+                                        editor_move_left(editor);
+                                        editor_select_to(editor, editor.cursor);
+                                    } else {
+                                        editor_clear_selection(editor);
+                                        editor_move_left(editor);
+                                    }
+                                    editor_scroll_to_cursor(editor, viewport_top_px, viewport_height_px, line_height);
+                                    handled = true; break;
+                                }
+                                case XK_Right: {
+                                    bool shift = (ev.xkey.state & ShiftMask) != 0;
+                                    if (shift) {
+                                        if(!editor.has_selection) editor.sel_anchor = editor.cursor;
+                                        editor_move_right(editor);
+                                        editor_select_to(editor, editor.cursor);
+                                    } else {
+                                        editor_clear_selection(editor);
+                                        editor_move_right(editor);
+                                    }
+                                    editor_scroll_to_cursor(editor, viewport_top_px, viewport_height_px, line_height);
+     
+                                    handled = true; break;
+                                }
                                 case XK_Up:        editor_move_up(editor);                    handled = true; break;
                                 case XK_Down:      editor_move_down(editor);                  handled = true; break;
                                 case XK_Home:      editor_move_home(editor);                  handled = true; break;
@@ -221,7 +279,23 @@ int main(int argc, char** argv){
                     if (!handled && (status == XLookupChars || status == XLookupBoth)) {
                         // Ctrl + letter would otherwise produce a control byte (e.g. ^S=0x13).
                         // Suppress those — only insert printable chars when no ctrl held.
-                        if (!ctrl) editor_insert_utf8(editor, buf, n);
+                        if (!ctrl){
+                            if (editor.has_selection) editor_delete_selection(editor);
+                            editor_insert_utf8(editor, buf, n);
+                            editor_scroll_to_cursor(editor, viewport_top_px, viewport_height_px, line_height);
+                        }
+                    
+                    }
+                    break;
+                }
+                
+                case ButtonPress: {
+                    if (ev.xbutton.button == Button4) {
+                        editor_scroll_lines(editor, -3, line_height, viewport_top_px,
+                                            viewport_height_px, text_total_height_px);
+                    } else if (ev.xbutton.button == Button5) {
+                        editor_scroll_lines(editor, 3, line_height, viewport_top_px,
+                                            viewport_height_px, text_total_height_px);
                     }
                     break;
                 }
@@ -278,18 +352,19 @@ int main(int argc, char** argv){
             if (editor.dirty) {
                 build_text_vertices_with_cursor(vk.text, font,
                     editor.text.c_str(), editor.cursor,
-                    ((float)((1 + (offset_x-1))/2)*app.width), ((float)((1 + (offset_y-1))/2)*app.height), 18.0f,    // x=50, baseline=80, 18px text
-                    0.92f, 0.92f, 0.94f, 1.0f);
-                append_cursor_quad(vk.text, font, 1.0f, 1.0f, 1.0f, 1.0f);
+                    text_origin_x, text_origin_y, 18.0f,    // x=50, baseline=80, 18px text
+                    0.910f, 0.886f, 0.839f, 1.0f);
+                append_cursor_quad(vk.text, font, 0.784f, 0.608f, 0.353f, 1.0f);
                 editor.dirty = false;
             } else {
                 // No editor change — but we still need to reset glyph_count
                 // before appending the HUD this frame. Re-run with same text.
                 build_text_vertices_with_cursor(vk.text, font,
                     editor.text.c_str(), editor.cursor,
-                    ((float)((1 + (offset_x-1))/2)*app.width), ((float)((1 + (offset_y-1))/2)*app.height), 18.0f,    // x=50, baseline=80, 18px text
-                    0.92f, 0.92f, 0.94f, 1.0f);
-                append_cursor_quad(vk.text, font, 1.0f, 1.0f, 1.0f, 1.0f);
+                    text_origin_x, text_origin_y, 18.0f,    // x=50, baseline=80, 18px text
+                    0.910f, 0.886f, 0.839f, 1.0f);
+
+                append_cursor_quad(vk.text, font, 0.784f, 0.608f, 0.353f, 1.0f);
             }
         
             // Append HUD line at bottom, 14px, dimmed.
@@ -312,12 +387,12 @@ int main(int argc, char** argv){
                          st ? st : "");
                 append_text_run(vk.text, font, title,
                                 12.0f, (float)app.height - 28.0f, 14.0f,
-                                0.85f, 0.85f, 0.85f, 0.9f);
+                                0.545f, 0.518f, 0.478f, 0.9f);
                 
                 // Line 2 (below): perf metrics
                 append_text_run(vk.text, font, hud,
                                 12.0f, (float)app.height - 8.0f, 14.0f,
-                                0.6f, 0.85f, 0.6f, 0.9f);
+                                0.545f, 0.518f, 0.478f, 0.9f);
                 
                 vk.text.pen_x      = saved_pen;
                 vk.text.baseline_y = saved_base;
@@ -339,7 +414,7 @@ int main(int argc, char** argv){
                 recreate_swapchain(vk, app);
                 vk.swapchain_dirty = false;
             }
-            render_and_sync(vk, app);
+            //render_and_sync(vk, app, font, editor);
             if (vk.renderer.swapchain_dirty_local) {
                 vk.swapchain_dirty = true;
                 vk.renderer.swapchain_dirty_local = false;
@@ -378,7 +453,7 @@ int main(int argc, char** argv){
                 recreate_swapchain(vk, app);
                 vk.swapchain_dirty = false;
             }
-            render_and_sync(vk, app);
+            render_and_sync(vk, app, font, editor, text_origin_x, text_origin_y);
 
             if (vk.renderer.swapchain_dirty_local) {
                 vk.swapchain_dirty = true;
@@ -416,9 +491,11 @@ cleanup:
         }
         vkDestroySwapchainKHR(vk.vkdev.device, vk.swapchain.handle, nullptr);
         
-        destroy_text_pipeline(vk.vkdev.device, vk.text);   // ← ADD
+        destroy_solid_pipeline(vk.vkdev.device, vk.solid);
 
-        destroy_atlas(vk.vkdev, vk.atlas);     // ← ADD THIS LINE
+        destroy_text_pipeline(vk.vkdev.device, vk.text);
+
+        destroy_atlas(vk.vkdev, vk.atlas);
 
 
         vkDestroyDevice(vk.vkdev.device, nullptr);

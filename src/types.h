@@ -10,6 +10,7 @@
 #include "pipeline.h"
 #include "atlas.h"
 #include "text.h"
+#include "solid.h"
 
 inline void print_resource_usage() {
     // RAM from /proc/self/status
@@ -74,6 +75,7 @@ struct VulkanState {
     VkImageView pending_destroy_views[8] = {};
     uint32_t pending_destroy_count = 0;
     TextPipeline text{};
+    SolidPipeline solid{};
 };
 
 
@@ -212,7 +214,7 @@ namespace axel {
     }
 
     constexpr int64_t base_to_unix(uint16_t base_day){
-        return (int16_t)base_day * 86400;
+        return (uint16_t)base_day * 86400;
     }
 
     inline uint16_t today_as_day(){

@@ -568,3 +568,75 @@ bool append_cursor_quad(TextPipeline& tp,
     tp.glyph_count++;
     return true;
 }
+
+
+uint32_t emit_selection_rects(SolidPipeline& sp, const AxylFont& font, const char* utf8_text, size_t sel_lo, size_t sel_hi, float origin_x_px, float origin_y_px, float pixel_size, float r, float g, float b, float a){
+    if (sel_lo >= sel_hi) return 0;
+    if (!utf8_text) return 0;
+
+    float cursor_x = origin_x_px;
+    float baseline = origin_y_px;
+
+    float line_height = (font.ascender - font.descender) * pixel_size * 1.2f;
+    float top_offset = font.ascender * pixel_size;
+    float bot_offset = font.descender * pixel_size;
+
+    bool in_selection = false;
+    float rect_x_start = 0.0f;
+    float rect_baseline = 0.0f;
+    uint32_t rect_count = 0;
+    
+    auto flush_rect = [&](float x_end) {
+        float top = rect_baseline - top_offset;
+        float height = top_offset - bot_offset;
+        if (x_end > rect_x_start){
+            if(solid_push_rect (sp, rect_x_start, top, x_end-rect_x_start, height, r, g, b, a)) {
+                rect_count++;
+            }
+        }
+    };
+
+    size_t byte_offset = 0;
+    for (const char* p = utf8_text; *p; p++, byte_offset++){
+        if(!in_selection && byte_offset == sel_lo){
+            in_selection = true;
+            rect_x_start = cursor_x;
+            rect_baseline = baseline;
+        }
+        
+
+        if (in_selection && byte_offset == sel_hi) {
+            flush_rect(cursor_x);
+            in_selection = false;
+            return rect_count;
+        }
+
+        uint32_t codepoint = (uint8_t)*p;
+
+        if(codepoint == '\n'){
+            if(in_selection){
+                float trail_end = cursor_x + 4.0f;
+                flush_rect(trail_end);
+                rect_baseline = baseline + line_height;
+                rect_x_start = origin_x_px;
+            }
+            baseline += line_height;
+            cursor_x = origin_x_px;
+            continue;
+        }
+
+        const Glyph* g_meta = font_get_glyph(font, codepoint);
+        if(!g_meta) continue;
+
+        cursor_x += g_meta->advance*pixel_size;
+
+
+    }
+
+    if(in_selection){
+        flush_rect(cursor_x);
+    }
+
+    return rect_count;
+
+}
