@@ -9,6 +9,7 @@
 [![CI](https://github.com/Axylith/axle/actions/workflows/ci.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/ci.yml)
 [![Sanitizers](https://github.com/Axylith/axle/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/sanitizers.yml)
 [![CodeQL](https://github.com/Axylith/axle/actions/workflows/codeql.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/codeql.yml)
+[![Snyk](https://snyk.io/test/github/Axylith/axle/badge.svg)](https://snyk.io/test/github/Axylith/axle)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/)
 
@@ -31,7 +32,7 @@ What currently works:
 - Atomic save and load through a 16-byte-headered `.axl` format, with plain-text fallback for any other UTF-8 file
 - MTSDF text rendering via a custom Vulkan 1.3 pipeline — resolution-independent, sub-pixel-accurate
 - On-screen HUD showing live frame time and keystroke-to-submit input latency
-- CI matrix across GCC 12, GCC 13, and Clang 17, with AddressSanitizer, UBSan, ThreadSanitizer, CodeQL, and static analysis on every push
+- CI matrix across GCC 12, GCC 13, and Clang 17, with AddressSanitizer, UBSan, ThreadSanitizer, CodeQL, Snyk, and SonarCloud on every push
 
 What is deliberately not yet implemented:
 
@@ -120,12 +121,10 @@ First-time contributors: look for issues labeled `good first issue` or `mentored
 
 Axylith is built by [Dev Bhatt](https://devbhatt.dev) and contributors. The project uses font atlas data derived from [JetBrains Mono](https://www.jetbrains.com/lp/mono/) and the MTSDF baking technique described by Viktor Chlumský.
 
-CI infrastructure provided by [GitHub Actions](https://github.com/features/actions), [GitLab CI](https://about.gitlab.com/), and [CircleCI](https://circleci.com/). Static analysis by [SonarCloud](https://sonarcloud.io/), [DeepSource](https://deepsource.com/), [Snyk](https://snyk.io/), and [CodeQL](https://codeql.github.com/).
-
 ---
 
 <div align="center">
 
-If you find this project worth supporting, please consider [sponsoring](https://github.com/sponsors/Axylith) or becoming a backer on [Open Collective](https://opencollective.com/axylith).
+If you find this project worth supporting, please consider [sponsoring on GitHub](https://github.com/sponsors/Axylith) or becoming a backer on [Open Collective](https://opencollective.com/axylith).
 
 </div>
