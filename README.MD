@@ -6,8 +6,6 @@
 
 [Documentation](https://docs.axylith.com) · [File Format](https://docs.axylith.com/format) · [Strategy](https://github.com/Axylith/axle/blob/development/changelog.md) · [Sponsor](https://github.com/sponsors/Axylith)
 
-[![CI](https://github.com/Axylith/axle/actions/workflows/ci.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/ci.yml)
-[![Sanitizers](https://github.com/Axylith/axle/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/sanitizers.yml)
 [![CodeQL](https://github.com/Axylith/axle/actions/workflows/codeql.yml/badge.svg)](https://github.com/Axylith/axle/actions/workflows/codeql.yml)
 [![Snyk](https://snyk.io/test/github/Axylith/axle/badge.svg)](https://snyk.io/test/github/Axylith/axle)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
