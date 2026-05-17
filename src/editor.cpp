@@ -358,13 +358,18 @@ bool editor_save(Editor &e){
         return false;
     }
 
-    unsigned char header[AXL_HEADER_LEN] = {0};
-    memcpy(header, AXL_MAGIC, 4);
-    header[4] = 1;
-    header[5] = 0;
+    ssize_t wrote;
 
-    ssize_t wrote = write(fd, header, AXL_HEADER_LEN);
-    if (wrote != (ssize_t)AXL_HEADER_LEN) goto write_err;
+    if (e.path.size() >= 4 && e.path.compare(e.path.size() - 4, 4, ".axl") == 0){//(path_is_axl(e.path)) {
+        unsigned char header[AXL_HEADER_LEN] = {0};
+        memcpy(header, AXL_MAGIC, 4);
+        header[4] = 1;   // format version
+        header[5] = 0;   // flags
+    
+        wrote = write(fd, header, AXL_HEADER_LEN);
+        if (wrote != (ssize_t)AXL_HEADER_LEN) goto write_err;
+    }
+
 
     if(!e.text.empty()){
         wrote = write(fd, e.text.data(), e.text.size());

@@ -189,7 +189,11 @@ int main(int argc, char** argv){
         // Document height for scroll clamping.
         size_t line_count = 1;
         for (char c : editor.text) if (c == '\n') line_count++;
+        
+        bool needs_redraw = editor.dirty || resize_pending;
         const float text_total_height_px = line_count * line_height;
+        if (editor_get_status(editor, 3.0) != nullptr) needs_redraw = true;
+
 
 
         while (XPending(app.display)){
@@ -486,13 +490,30 @@ int main(int argc, char** argv){
             if (vk.swapchain_dirty) {
                 recreate_swapchain(vk, app);
                 vk.swapchain_dirty = false;
+                needs_redraw = true;
             }
-            render_and_sync(vk, app, font, editor, text_origin_x, text_origin_y);
 
-            if (vk.renderer.swapchain_dirty_local) {
-                vk.swapchain_dirty = true;
-                vk.renderer.swapchain_dirty_local = false;
+            static double last_hud_redraw_ms = 0.0;
+            if (metrics.visible){
+                double now = frame_timer.elapsed_ms();
+
+                double t= monitor_timer.elapsed_ms();
+
+                if(t - last_hud_redraw_ms >= 50){
+                    needs_redraw = true;
+                    last_hud_redraw_ms = t;
+                }
             }
+            if (needs_redraw){
+                render_and_sync(vk, app, font, editor, text_origin_x, text_origin_y);
+                if(vk.renderer.swapchain_dirty_local){
+                    vk.swapchain_dirty = true;
+                    vk.renderer.swapchain_dirty_local = false;
+                }
+            } else {
+                usleep(8000);
+            }
+            //render_and_sync(vk, app, font, editor, text_origin_x, text_origin_y);
         }
     }
 

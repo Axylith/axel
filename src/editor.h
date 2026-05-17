@@ -2,6 +2,9 @@
 #include <string>
 #include <chrono>
 
+enum class SaveFormat { Plain, Axl };
+
+
 struct Editor {
     std::string text;
     bool dirty = true;
@@ -21,6 +24,7 @@ struct Editor {
 
     std::chrono::steady_clock::time_point last_input;
     bool measure_pending = false;
+    SaveFormat format = SaveFormat::Axl;
 
 };
 
